@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,10 +25,7 @@ const avatarSrc = computed(() => {
 
 function openRoom() {
   if (props.subscription.room_id) {
-    window.open(
-      `https://live.bilibili.com/${props.subscription.room_id}`,
-      "_blank"
-    );
+    openUrl(`https://live.bilibili.com/${props.subscription.room_id}`);
   }
 }
 </script>

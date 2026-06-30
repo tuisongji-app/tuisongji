@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -9,8 +8,6 @@ import { Settings } from "lucide-vue-next";
 
 const { getConfig, updatePollInterval } = useBilibili();
 const interval = ref(30);
-const saved = ref(false);
-const saving = ref(false);
 
 onMounted(async () => {
   try {
@@ -21,19 +18,9 @@ onMounted(async () => {
   }
 });
 
-async function saveInterval() {
-  if (interval.value < 1) {
-    interval.value = 1;
-  }
-  saving.value = true;
-  try {
-    await updatePollInterval(interval.value);
-    saved.value = true;
-    setTimeout(() => (saved.value = false), 2000);
-  } catch {
-    // silently fail
-  } finally {
-    saving.value = false;
+function onChange(val: number) {
+  if (val >= 1) {
+    updatePollInterval(val);
   }
 }
 </script>
@@ -47,24 +34,19 @@ async function saveInterval() {
       <h2 class="text-sm font-semibold text-muted-foreground">设置</h2>
     </div>
 
-    <!-- Poll interval -->
-    <div class="flex items-end gap-2">
-      <div class="flex-1">
-        <Label for="interval" class="text-xs text-muted-foreground mb-1 block">
-          轮询间隔 (分钟)
-        </Label>
-        <NumberField
-          id="interval"
-          v-model="interval"
-          :min="1"
-        />
-      </div>
-      <Button variant="outline" :disabled="saving" @click="saveInterval">
-        {{ saved ? "已保存" : "保存" }}
-      </Button>
+    <div>
+      <Label for="interval" class="text-xs text-muted-foreground mb-1 block">
+        轮询间隔 (分钟)
+      </Label>
+      <NumberField
+        id="interval"
+        v-model="interval"
+        :min="1"
+        @update:model-value="onChange"
+      />
     </div>
     <p class="text-xs text-muted-foreground mt-1.5">
-      最小1分钟，默认30分钟
+      每隔一段时间获取状态，最小1分钟
     </p>
   </div>
 </template>

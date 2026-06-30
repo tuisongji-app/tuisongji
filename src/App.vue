@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
-import AppHeader from "./components/AppHeader.vue";
 import SubscriptionForm from "./components/SubscriptionForm.vue";
 import SubscriptionList from "./components/SubscriptionList.vue";
 import SettingsSection from "./components/SettingsSection.vue";
-import TestPanel from "./components/TestPanel.vue";
+// import TestPanel from "./components/TestPanel.vue";
 import { useBilibili } from "./composables/useBilibili";
 import type { SubscriptionStatus } from "./types";
 
@@ -48,7 +47,6 @@ async function onSubscriptionRemoved(uid: number) {
 <template>
   <div class="min-h-screen bg-background">
     <div class="max-w-lg mx-auto p-6">
-      <AppHeader :count="subscriptions.length" />
       <SubscriptionForm @added="onSubscriptionAdded" />
 
       <div v-if="loading" class="text-center py-8 text-muted-foreground">
@@ -62,7 +60,7 @@ async function onSubscriptionRemoved(uid: number) {
       />
 
       <SettingsSection />
-      <TestPanel :subscriptions="subscriptions" />
+      <!-- <TestPanel :subscriptions="subscriptions" /> -->
     </div>
   </div>
 </template>
