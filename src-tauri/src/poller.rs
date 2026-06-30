@@ -1,5 +1,5 @@
 use crate::bilibili_api;
-use crate::state::{AppState, LiveStatus};
+use crate::state::{AppState, LiveStatus, Subscription};
 use log::{error, warn};
 use std::sync::Arc;
 use store::figment::value::Value;
@@ -101,14 +101,24 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                         };
 
                         if prev_status != new_status {
-                            let display_name = {
+                            let (display_name, sub_type) = {
                                 let store = state.store.lock().unwrap();
                                 let data = store.get_all();
-                                data.subscriptions
+                                let s = data
+                                    .subscriptions
                                     .iter()
                                     .find(|s| s.uid == sub.uid)
-                                    .and_then(|s| s.name.clone())
-                                    .unwrap_or_else(|| "未知".to_string())
+                                    .cloned()
+                                    .unwrap_or(Subscription {
+                                        r#type: "bilibili".into(),
+                                        uid: sub.uid,
+                                        name: Some("未知".into()),
+                                        room_id: None,
+                                    });
+                                (
+                                    s.name.unwrap_or_else(|| "未知".to_string()),
+                                    s.r#type,
+                                )
                             };
 
                             let status_update = crate::state::SubscriptionStatus {
@@ -123,6 +133,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
 
                             crate::notify_status_change(
                                 &app_handle,
+                                &sub_type,
                                 &display_name,
                                 &prev_status,
                                 &new_status,

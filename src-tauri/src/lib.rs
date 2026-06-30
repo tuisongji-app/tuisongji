@@ -199,23 +199,29 @@ async fn get_config(
 // Shared notification — used by poller (via poller.rs) and test command
 pub fn notify_status_change(
     app_handle: &tauri::AppHandle,
+    sub_type: &str,
     name: &str,
     prev_status: &LiveStatus,
     new_status: &LiveStatus,
     live_title: Option<&str>,
 ) {
-    let (title, body) = match (prev_status, new_status) {
-        (LiveStatus::Offline, LiveStatus::Live) => {
-            let b = live_title.unwrap_or("正在直播");
-            (format!("推送姬 - {} 开播了!", name), b.to_string())
-        }
-        (LiveStatus::Live, LiveStatus::Offline) => {
-            (format!("推送姬 - {} 已结束直播", name), "直播已结束".to_string())
-        }
+    // Treat Replay as not-live for notification purposes
+    let was_live = *prev_status == LiveStatus::Live;
+    let is_live = *new_status == LiveStatus::Live;
+
+    let body = match (was_live, is_live) {
+        (false, true) => live_title.unwrap_or("开播了!").to_string(),
+        (true, false) => "已结束直播".to_string(),
         _ => return,
     };
 
-    match app_handle.notification().builder().title(title).body(body).show() {
+    let builder = app_handle
+        .notification()
+        .builder()
+        .title(format!("{} - {}", sub_type, name))
+        .body(body);
+
+    match builder.show() {
         Ok(_) => info!("Notification sent: {} {:?}→{:?}", name, prev_status, new_status),
         Err(e) => error!("Notification failed: {:?}", e),
     }
@@ -240,13 +246,14 @@ async fn test_trigger_status(
         cache.insert(uid, new_status.clone()).unwrap_or(LiveStatus::Offline)
     };
 
-    let (name, room_id) = {
+    let (name, room_id, sub_type) = {
         let store = state.store.lock().unwrap();
         let data = store.get_all();
         let sub = data.subscriptions.iter().find(|s| s.uid == uid).ok_or("订阅不存在")?;
         (
             sub.name.clone().unwrap_or_else(|| "未知".to_string()),
             sub.room_id,
+            sub.r#type.clone(),
         )
     };
 
@@ -266,7 +273,7 @@ async fn test_trigger_status(
 
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-    notify_status_change(&app_handle, &name, &prev_status, &new_status, None);
+    notify_status_change(&app_handle, &sub_type, &name, &prev_status, &new_status, None);
 
     Ok(())
 }
