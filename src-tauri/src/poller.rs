@@ -7,7 +7,6 @@ use tauri::Emitter;
 
 pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
     tauri::async_runtime::spawn(async move {
-        // Initial delay to let app settle
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         loop {
@@ -26,20 +25,23 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 }
 
-                // Use cached room_id if available, otherwise resolve from master info
                 let room_id = match sub.room_id {
                     Some(rid) => rid,
                     None => {
-                        // First-time resolution: get room_id from master info
                         match bilibili_api::get_master_info(sub.uid).await {
-                            Ok((name, avatar_url, rid)) => {
-                                let mut subs = state.subscriptions.lock().unwrap();
-                                if let Some(s) = subs.iter_mut().find(|s| s.uid == sub.uid) {
-                                    s.name = Some(name);
-                                    s.room_id = Some(rid);
-                                    s.avatar_url = avatar_url;
+                            Ok((name, remote_avatar, rid)) => {
+                                {
+                                    let mut subs = state.subscriptions.lock().unwrap();
+                                    if let Some(s) = subs.iter_mut().find(|s| s.uid == sub.uid) {
+                                        s.name = Some(name);
+                                        s.room_id = Some(rid);
+                                    }
                                 }
-                                drop(subs);
+                                // Download avatar (lock dropped, safe to await)
+                                if let Some(ref url) = remote_avatar {
+                                    let data_dir = state.data_dir.clone();
+                                    let _ = bilibili_api::download_avatar(url, sub.uid, &data_dir).await;
+                                }
                                 state.save();
                                 rid
                             }
@@ -51,12 +53,10 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                     }
                 };
 
-                // Query room info for live status
                 match bilibili_api::get_room_info(room_id).await {
                     Ok(room_info) => {
                         let new_status = LiveStatus::from_i64(room_info.live_status);
 
-                        // Refresh user name if still unknown
                         let needs_name_refresh = {
                             let subs = state.subscriptions.lock().unwrap();
                             subs.iter()
@@ -65,28 +65,22 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                 .unwrap_or(false)
                         };
                         if needs_name_refresh {
-                            let data_dir = state.data_dir.clone();
                             if let Ok((name, remote_avatar, _)) =
                                 bilibili_api::get_master_info(sub.uid).await
                             {
-                                let local_avatar = if let Some(ref url) = remote_avatar {
-                                    bilibili_api::download_avatar(url, sub.uid, &data_dir)
-                                        .await
-                                        .ok()
-                                } else {
-                                    None
-                                };
+                                let data_dir = state.data_dir.clone();
+                                if let Some(ref url) = remote_avatar {
+                                    let _ = bilibili_api::download_avatar(url, sub.uid, &data_dir).await;
+                                }
                                 let mut subs = state.subscriptions.lock().unwrap();
                                 if let Some(s) = subs.iter_mut().find(|s| s.uid == sub.uid) {
                                     s.name = Some(name);
-                                    s.avatar_url = local_avatar;
                                 }
                                 drop(subs);
                                 state.save();
                             }
                         }
 
-                        // Check for status change
                         let prev_status = {
                             let mut cache = state.status_cache.lock().unwrap();
                             cache
@@ -103,25 +97,16 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                     .unwrap_or_else(|| "未知".to_string())
                             };
 
-                            let avatar_url = {
-                                let subs = state.subscriptions.lock().unwrap();
-                                subs.iter()
-                                    .find(|s| s.uid == sub.uid)
-                                    .and_then(|s| s.avatar_url.clone())
-                            };
-
-                            // Emit event to frontend
                             let status_update = crate::state::SubscriptionStatus {
                                 uid: sub.uid,
                                 name: display_name.clone(),
                                 status: new_status.clone(),
                                 title: Some(room_info.title.clone()),
                                 room_id: Some(room_id),
-                                avatar_url,
+                                avatar_url: Some(state.avatar_full_path(sub.uid)),
                             };
                             let _ = app_handle.emit("status-changed", &status_update);
 
-                            // Notify via shared function
                             crate::notify_status_change(
                                 &app_handle,
                                 &display_name,

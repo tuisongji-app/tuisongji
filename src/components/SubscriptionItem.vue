@@ -19,11 +19,7 @@ const emit = defineEmits<{
 const avatarSrc = computed(() => {
   const url = props.subscription.avatar_url;
   if (!url) return null;
-  // If it's a local file path (starts with /), convert to asset URL
-  if (url.startsWith("/")) {
-    return convertFileSrc(url);
-  }
-  return url;
+  return convertFileSrc(url);
 });
 
 function openRoom() {

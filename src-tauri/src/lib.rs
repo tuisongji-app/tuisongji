@@ -30,17 +30,11 @@ async fn add_subscription(
 
     // Step 2: download avatar to local cache
     let data_dir = state.data_dir.clone();
-    let local_avatar = if let Some(ref url) = remote_avatar_url {
-        match bilibili_api::download_avatar(url, uid, &data_dir).await {
-            Ok(path) => Some(path),
-            Err(e) => {
-                warn!("Avatar download failed: {}", e);
-                remote_avatar_url // fallback to remote URL
-            }
+    if let Some(ref url) = remote_avatar_url {
+        if let Err(e) = bilibili_api::download_avatar(url, uid, &data_dir).await {
+            warn!("Avatar download failed: {}", e);
         }
-    } else {
-        None
-    };
+    }
 
     // Step 3: get live status from room info
     let room_info = bilibili_api::get_room_info(room_id).await?;
@@ -53,7 +47,6 @@ async fn add_subscription(
             uid,
             name: Some(name.clone()),
             room_id: Some(room_id),
-            avatar_url: local_avatar.clone(),
         });
     }
 
@@ -72,7 +65,7 @@ async fn add_subscription(
         status,
         title: Some(room_info.title),
         room_id: Some(room_id),
-        avatar_url: local_avatar,
+        avatar_url: Some(state.avatar_full_path(uid)),
     };
 
     let _ = app_handle.emit("status-changed", &result);
@@ -117,7 +110,7 @@ async fn list_subscriptions(
                 status,
                 title: None,
                 room_id: s.room_id,
-                avatar_url: s.avatar_url,
+                avatar_url: Some(state.avatar_full_path(s.uid)),
             }
         })
         .collect();
@@ -155,20 +148,13 @@ async fn refresh_status(
             .unwrap_or_else(|| "未知".to_string())
     };
 
-    let sub_avatar = {
-        let subs = state.subscriptions.lock().unwrap();
-        subs.iter()
-            .find(|s| s.uid == uid)
-            .and_then(|s| s.avatar_url.clone())
-    };
-
     Ok(SubscriptionStatus {
         uid,
         name: sub_name,
         status,
         title: Some(room_info.title),
         room_id: Some(room_id),
-        avatar_url: sub_avatar,
+        avatar_url: Some(state.avatar_full_path(uid)),
     })
 }
 
@@ -256,12 +242,11 @@ async fn test_trigger_status(
         cache.insert(uid, new_status.clone()).unwrap_or(LiveStatus::Offline)
     };
 
-    let (name, avatar_url, room_id) = {
+    let (name, room_id) = {
         let subs = state.subscriptions.lock().unwrap();
         let sub = subs.iter().find(|s| s.uid == uid).ok_or("订阅不存在")?;
         (
             sub.name.clone().unwrap_or_else(|| "未知".to_string()),
-            sub.avatar_url.clone(),
             sub.room_id,
         )
     };
@@ -272,7 +257,7 @@ async fn test_trigger_status(
         status: new_status.clone(),
         title: if new_status == LiveStatus::Live { Some("【测试】模拟开播标题".to_string()) } else { None },
         room_id,
-        avatar_url,
+        avatar_url: Some(state.avatar_full_path(uid)),
     };
     let _ = app_handle.emit("status-changed", &status_update);
 

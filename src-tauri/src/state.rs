@@ -9,7 +9,6 @@ pub struct Subscription {
     pub uid: u64,
     pub name: Option<String>,
     pub room_id: Option<u64>,
-    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -76,6 +75,14 @@ impl AppState {
         };
         state.load();
         state
+    }
+
+    pub fn avatar_full_path(&self, uid: u64) -> String {
+        self.data_dir
+            .join("avatars")
+            .join(format!("{}.jpg", uid))
+            .to_string_lossy()
+            .to_string()
     }
 
     fn persist_path(&self) -> PathBuf {
