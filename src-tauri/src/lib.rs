@@ -2,9 +2,10 @@ mod bilibili_api;
 mod poller;
 mod state;
 
+use log::{error, info, warn};
 use state::{AppState, LiveStatus, Subscription, SubscriptionStatus};
 use std::sync::Arc;
-use log::{error, info, warn};
+use store::figment::value::Value;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_notification::NotificationExt;
@@ -19,8 +20,9 @@ async fn add_subscription(
 ) -> Result<SubscriptionStatus, String> {
     // Check for duplicates
     {
-        let subs = state.subscriptions.lock().unwrap();
-        if subs.iter().any(|s| s.uid == uid) {
+        let store = state.store.lock().unwrap();
+        let data = store.get_all();
+        if data.subscriptions.iter().any(|s| s.uid == uid) {
             return Err("该UID已添加".to_string());
         }
     }
@@ -40,14 +42,21 @@ async fn add_subscription(
     let room_info = bilibili_api::get_room_info(room_id).await?;
     let status = LiveStatus::from_i64(room_info.live_status);
 
-    // Add subscription
+    // Persist to store
     {
-        let mut subs = state.subscriptions.lock().unwrap();
-        subs.push(Subscription {
+        let mut store = state.store.lock().unwrap();
+        let mut data = store.get_all();
+        data.subscriptions.push(Subscription {
             uid,
             name: Some(name.clone()),
             room_id: Some(room_id),
+            r#type: "bilibili".into(),
         });
+        let value =
+            Value::serialize(&data.subscriptions).map_err(|e| format!("Serialize: {}", e))?;
+        store
+            .set("subscriptions", value)
+            .map_err(|e| format!("Store: {}", e))?;
     }
 
     // Initialize status cache
@@ -55,9 +64,6 @@ async fn add_subscription(
         let mut cache = state.status_cache.lock().unwrap();
         cache.insert(uid, status.clone());
     }
-
-    // Persist
-    state.save();
 
     let result = SubscriptionStatus {
         uid,
@@ -79,14 +85,19 @@ async fn remove_subscription(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     {
-        let mut subs = state.subscriptions.lock().unwrap();
-        subs.retain(|s| s.uid != uid);
+        let mut store = state.store.lock().unwrap();
+        let mut data = store.get_all();
+        data.subscriptions.retain(|s| s.uid != uid);
+        let value =
+            Value::serialize(&data.subscriptions).map_err(|e| format!("Serialize: {}", e))?;
+        store
+            .set("subscriptions", value)
+            .map_err(|e| format!("Store: {}", e))?;
     }
     {
         let mut cache = state.status_cache.lock().unwrap();
         cache.remove(&uid);
     }
-    state.save();
     Ok(())
 }
 
@@ -95,9 +106,10 @@ async fn list_subscriptions(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<Vec<SubscriptionStatus>, String> {
     let (subs, cache) = {
-        let subs = state.subscriptions.lock().unwrap().clone();
+        let store = state.store.lock().unwrap();
+        let data = store.get_all();
         let cache = state.status_cache.lock().unwrap().clone();
-        (subs, cache)
+        (data.subscriptions, cache)
     };
 
     let result = subs
@@ -123,10 +135,11 @@ async fn refresh_status(
     uid: u64,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<SubscriptionStatus, String> {
-    // Get room_id from cached subscription
     let room_id = {
-        let subs = state.subscriptions.lock().unwrap();
-        subs.iter()
+        let store = state.store.lock().unwrap();
+        let data = store.get_all();
+        data.subscriptions
+            .iter()
             .find(|s| s.uid == uid)
             .and_then(|s| s.room_id)
             .ok_or("未找到该订阅".to_string())?
@@ -141,8 +154,10 @@ async fn refresh_status(
     }
 
     let sub_name = {
-        let subs = state.subscriptions.lock().unwrap();
-        subs.iter()
+        let store = state.store.lock().unwrap();
+        let data = store.get_all();
+        data.subscriptions
+            .iter()
             .find(|s| s.uid == uid)
             .and_then(|s| s.name.clone())
             .unwrap_or_else(|| "未知".to_string())
@@ -167,11 +182,10 @@ async fn update_poll_interval(
     if interval_secs < min_interval {
         return Err(format!("轮询间隔不能小于{}秒", min_interval));
     }
-    {
-        let mut config = state.config.lock().unwrap();
-        config.poll_interval_secs = interval_secs;
-    }
-    state.save();
+    let mut store = state.store.lock().unwrap();
+    store
+        .set("config.poll_interval_secs", interval_secs)
+        .map_err(|e| format!("Store: {}", e))?;
     Ok(())
 }
 
@@ -179,8 +193,8 @@ async fn update_poll_interval(
 async fn get_config(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<state::AppConfig, String> {
-    let config = state.config.lock().unwrap().clone();
-    Ok(config)
+    let store = state.store.lock().unwrap();
+    Ok(store.get_all().config)
 }
 
 // Shared notification — used by poller (via poller.rs) and test command
@@ -228,8 +242,9 @@ async fn test_trigger_status(
     };
 
     let (name, room_id) = {
-        let subs = state.subscriptions.lock().unwrap();
-        let sub = subs.iter().find(|s| s.uid == uid).ok_or("订阅不存在")?;
+        let store = state.store.lock().unwrap();
+        let data = store.get_all();
+        let sub = data.subscriptions.iter().find(|s| s.uid == uid).ok_or("订阅不存在")?;
         (
             sub.name.clone().unwrap_or_else(|| "未知".to_string()),
             sub.room_id,
@@ -240,13 +255,16 @@ async fn test_trigger_status(
         uid,
         name: name.clone(),
         status: new_status.clone(),
-        title: if new_status == LiveStatus::Live { Some("【测试】模拟开播标题".to_string()) } else { None },
+        title: if new_status == LiveStatus::Live {
+            Some("【测试】模拟开播标题".to_string())
+        } else {
+            None
+        },
         room_id,
         avatar_url: Some(state.avatar_full_path(uid)),
     };
     let _ = app_handle.emit("status-changed", &status_update);
 
-    // Delay so user can switch focus away from app to see notification
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     notify_status_change(&app_handle, &name, &prev_status, &new_status, None);
@@ -267,8 +285,6 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-
-            // Determine data directory
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -276,13 +292,10 @@ pub fn run() {
 
             let state = Arc::new(AppState::new(data_dir));
 
-            // Start background poller
             poller::start_poller(app.handle().clone(), state.clone());
 
-            // Manage state
             app.manage(state);
 
-            // Build tray menu
             let show = tauri::menu::MenuItemBuilder::with_id("show", "显示设置")
                 .build(app)?;
             let quit = tauri::menu::MenuItemBuilder::with_id("quit", "退出")
@@ -292,7 +305,6 @@ pub fn run() {
                 .item(&quit)
                 .build()?;
 
-            // Build tray icon
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
                 .expect("Failed to load tray icon");
 

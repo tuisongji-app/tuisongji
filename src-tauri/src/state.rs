@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use store::Store;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subscription {
+    pub r#type: String,
     pub uid: u64,
     pub name: Option<String>,
     pub room_id: Option<u64>,
@@ -52,29 +53,35 @@ pub struct SubscriptionStatus {
     pub avatar_url: Option<String>,
 }
 
-pub struct AppState {
-    pub subscriptions: Mutex<Vec<Subscription>>,
-    pub status_cache: Mutex<HashMap<u64, LiveStatus>>,
-    pub config: Mutex<AppConfig>,
-    pub data_dir: PathBuf,
+/// Persisted state — managed by Store
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PersistData {
+    pub subscriptions: Vec<Subscription>,
+    pub config: AppConfig,
 }
 
-#[derive(Serialize, Deserialize)]
-struct PersistData {
-    subscriptions: Vec<Subscription>,
-    config: AppConfig,
+pub struct AppState {
+    pub store: Mutex<Store<PersistData>>,
+    pub status_cache: Mutex<HashMap<u64, LiveStatus>>,
+    pub data_dir: PathBuf,
 }
 
 impl AppState {
     pub fn new(data_dir: PathBuf) -> Self {
-        let state = Self {
-            subscriptions: Mutex::new(Vec::new()),
+        let path = data_dir.join("state.json");
+        let path_str = path.to_string_lossy().to_string();
+        let store = Store::<PersistData>::builder()
+            .set_save_path(&path_str, store::FileFormat::Json)
+            .set_default_source(PersistData::default())
+            .expect("Failed to set default source")
+            .build()
+            .expect("Failed to initialize store");
+
+        Self {
+            store: Mutex::new(store),
             status_cache: Mutex::new(HashMap::new()),
-            config: Mutex::new(AppConfig::default()),
             data_dir,
-        };
-        state.load();
-        state
+        }
     }
 
     pub fn avatar_full_path(&self, uid: u64) -> String {
@@ -83,45 +90,5 @@ impl AppState {
             .join(format!("{}.jpg", uid))
             .to_string_lossy()
             .to_string()
-    }
-
-    fn persist_path(&self) -> PathBuf {
-        self.data_dir.join("subscriptions.json")
-    }
-
-    fn load(&self) {
-        let path = self.persist_path();
-        if path.exists() {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(data) = serde_json::from_str::<PersistData>(&content) {
-                    if let Ok(mut subs) = self.subscriptions.lock() {
-                        *subs = data.subscriptions;
-                    }
-                    if let Ok(mut cfg) = self.config.lock() {
-                        *cfg = data.config;
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn save(&self) {
-        let path = self.persist_path();
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-
-        let data = PersistData {
-            subscriptions: self
-                .subscriptions
-                .lock()
-                .map(|s| s.clone())
-                .unwrap_or_default(),
-            config: self.config.lock().map(|c| c.clone()).unwrap_or_default(),
-        };
-
-        if let Ok(json) = serde_json::to_string_pretty(&data) {
-            let _ = fs::write(&path, json);
-        }
     }
 }
