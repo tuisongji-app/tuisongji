@@ -183,18 +183,6 @@ async fn get_config(
     Ok(config)
 }
 
-#[tauri::command]
-async fn request_notification_permission(
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    use tauri_plugin_notification::NotificationExt;
-    app_handle
-        .notification()
-        .request_permission()
-        .map_err(|e| format!("Failed to request notification permission: {}", e))?;
-    Ok(())
-}
-
 // Shared notification — used by poller (via poller.rs) and test command
 pub fn notify_status_change(
     app_handle: &tauri::AppHandle,
@@ -210,9 +198,6 @@ pub fn notify_status_change(
         }
         (LiveStatus::Live, LiveStatus::Offline) => {
             (format!("推送姬 - {} 已结束直播", name), "直播已结束".to_string())
-        }
-        (_, LiveStatus::Replay) => {
-            (format!("推送姬 - {} 状态变更", name), "正在轮播中".to_string())
         }
         _ => return,
     };
@@ -260,6 +245,9 @@ async fn test_trigger_status(
         avatar_url: Some(state.avatar_full_path(uid)),
     };
     let _ = app_handle.emit("status-changed", &status_update);
+
+    // Delay so user can switch focus away from app to see notification
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     notify_status_change(&app_handle, &name, &prev_status, &new_status, None);
 
@@ -355,7 +343,6 @@ pub fn run() {
             update_poll_interval,
             get_config,
             test_trigger_status,
-            request_notification_permission,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

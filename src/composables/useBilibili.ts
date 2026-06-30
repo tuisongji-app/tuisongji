@@ -26,10 +26,6 @@ export function useBilibili() {
     return invoke("get_config");
   }
 
-  async function requestNotificationPermission(): Promise<void> {
-    return invoke("request_notification_permission");
-  }
-
   async function testTriggerStatus(
     uid: number,
     targetStatus: string
@@ -44,7 +40,6 @@ export function useBilibili() {
     refreshStatus,
     updatePollInterval,
     getConfig,
-    requestNotificationPermission,
     testTriggerStatus,
   };
 }

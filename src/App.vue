@@ -9,18 +9,11 @@ import TestPanel from "./components/TestPanel.vue";
 import { useBilibili } from "./composables/useBilibili";
 import type { SubscriptionStatus } from "./types";
 
-const { listSubscriptions, removeSubscription, requestNotificationPermission } =
-  useBilibili();
+const { listSubscriptions, removeSubscription } = useBilibili();
 const subscriptions = ref<SubscriptionStatus[]>([]);
 const loading = ref(true);
 
 onMounted(async () => {
-  try {
-    await requestNotificationPermission();
-  } catch {
-    // notification permission prompt may fail silently
-  }
-
   try {
     subscriptions.value = await listSubscriptions();
   } catch {
