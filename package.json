@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2",
     "@vueuse/core": "^14.3.0",
     "class-variance-authority": "^0.7.1",

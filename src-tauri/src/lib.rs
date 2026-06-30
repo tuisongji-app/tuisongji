@@ -2,13 +2,137 @@ mod bilibili_api;
 mod poller;
 mod state;
 
-use log::{error, info, warn};
+use log::{info, warn};
 use state::{AppState, LiveStatus, Subscription, SubscriptionStatus};
+use std::sync::Mutex;
 use std::sync::Arc;
 use store::figment::value::Value;
 use tauri::Emitter;
 use tauri::Manager;
-use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_opener::OpenerExt;
+
+// ---- Notification queue ----
+
+struct NotifItem {
+    room_id: u64,
+    name: String,
+    action: String,
+    avatar_path: Option<String>,
+}
+
+static NOTIFS: Mutex<Vec<NotifItem>> = Mutex::new(Vec::new());
+
+fn load_avatar_icon(path: &str) -> Option<tauri::image::Image<'static>> {
+    use image::imageops::FilterType;
+
+    let bytes = std::fs::read(path).ok()?;
+    let img = image::load_from_memory(&bytes).ok()?;
+    let src = img.to_rgba8();
+
+    // Resize to crop square then round
+    let min_dim = src.dimensions().0.min(src.dimensions().1);
+    let cropped = image::imageops::crop_imm(&src, 0, 0, min_dim, min_dim).to_image();
+    let size = 48u32; // larger tray icon
+    let resized = image::imageops::resize(&cropped, size, size, FilterType::Lanczos3);
+
+    let mut dst = image::RgbaImage::new(size, size);
+    let cx = (size as f32) / 2.0;
+    let r = cx;
+
+    for y in 0..size {
+        for x in 0..size {
+            let dx = x as f32 - cx;
+            let dy = y as f32 - cx;
+            if dx * dx + dy * dy <= r * r {
+                dst.put_pixel(x, y, *resized.get_pixel(x, y));
+            }
+        }
+    }
+
+    let raw = dst.into_raw();
+    Some(tauri::image::Image::new_owned(raw, size, size))
+}
+
+fn rebuild_tray_menu(app_handle: &tauri::AppHandle) {
+    let notifs = NOTIFS.lock().unwrap();
+    let mut menu = tauri::menu::MenuBuilder::new(app_handle);
+
+    // Group header + notification items
+    if !notifs.is_empty() {
+        let header = tauri::menu::MenuItemBuilder::with_id("bili_header", "bilibili")
+            .enabled(false)
+            .build(app_handle)
+            .unwrap();
+        menu = menu.item(&header);
+    }
+    for item in notifs.iter() {
+        let label = format!("{} {}", item.name, item.action);
+        let id = format!("notif:{}", item.room_id);
+
+        // Try to use IconMenuItemBuilder with avatar
+        let mi: Box<dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+            if let Some(ref path) = item.avatar_path {
+                if let Some(icon) = load_avatar_icon(path) {
+                    match tauri::menu::IconMenuItemBuilder::with_id(
+                        id.clone(),
+                        label.clone(),
+                    )
+                    .icon(icon)
+                    .build(app_handle)
+                    {
+                        Ok(icon_mi) => Box::new(icon_mi),
+                        Err(_) => Box::new(
+                            tauri::menu::MenuItemBuilder::with_id(id, label)
+                                .build(app_handle)
+                                .unwrap(),
+                        ),
+                    }
+                } else {
+                    Box::new(
+                        tauri::menu::MenuItemBuilder::with_id(id, label)
+                            .build(app_handle)
+                            .unwrap(),
+                    )
+                }
+            } else {
+                Box::new(
+                    tauri::menu::MenuItemBuilder::with_id(id, label)
+                        .build(app_handle)
+                        .unwrap(),
+                )
+            };
+        menu = menu.item(&*mi);
+    }
+
+    // Separator + clear all
+    if !notifs.is_empty() {
+        let clear = tauri::menu::MenuItemBuilder::with_id("clear_all", "清空全部")
+            .build(app_handle)
+            .unwrap();
+        menu = menu.separator().item(&clear);
+    }
+
+    // Separator + show + quit
+    let show_item = tauri::menu::MenuItemBuilder::with_id("show", "显示界面")
+        .build(app_handle)
+        .unwrap();
+    let quit_item = tauri::menu::MenuItemBuilder::with_id("quit", "退出")
+        .build(app_handle)
+        .unwrap();
+    let menu = menu.separator().item(&show_item).item(&quit_item).build().unwrap();
+
+    // Update tray
+    if let Some(tray) = app_handle.tray_by_id("main") {
+        // Update title: show latest notification text, or clear if empty
+        if let Some(first) = notifs.first() {
+            let _ = tray.set_title(Some(&format!("{} {}", first.name, first.action)));
+        } else {
+            // macOS: use empty string to clear (None doesn't work)
+            let _ = tray.set_title(Some(""));
+        }
+        let _ = tray.set_menu(Some(menu));
+    }
+}
 
 // ---- Tauri Commands ----
 
@@ -18,7 +142,6 @@ async fn add_subscription(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<SubscriptionStatus, String> {
-    // Check for duplicates
     {
         let store = state.store.lock().unwrap();
         let data = store.get_all();
@@ -27,10 +150,8 @@ async fn add_subscription(
         }
     }
 
-    // Step 1: get user profile + room_id
     let (name, remote_avatar_url, room_id) = bilibili_api::get_master_info(uid).await?;
 
-    // Step 2: download avatar to local cache
     let data_dir = state.data_dir.clone();
     if let Some(ref url) = remote_avatar_url {
         if let Err(e) = bilibili_api::download_avatar(url, uid, &data_dir).await {
@@ -38,11 +159,9 @@ async fn add_subscription(
         }
     }
 
-    // Step 3: get live status from room info
     let room_info = bilibili_api::get_room_info(room_id).await?;
     let status = LiveStatus::from_i64(room_info.live_status);
 
-    // Persist to store
     {
         let mut store = state.store.lock().unwrap();
         let mut data = store.get_all();
@@ -59,7 +178,6 @@ async fn add_subscription(
             .map_err(|e| format!("Store: {}", e))?;
     }
 
-    // Initialize status cache
     {
         let mut cache = state.status_cache.lock().unwrap();
         cache.insert(uid, status.clone());
@@ -75,7 +193,6 @@ async fn add_subscription(
     };
 
     let _ = app_handle.emit("status-changed", &result);
-
     Ok(result)
 }
 
@@ -196,35 +313,46 @@ async fn get_config(
     Ok(store.get_all().config)
 }
 
-// Shared notification — used by poller (via poller.rs) and test command
 pub fn notify_status_change(
     app_handle: &tauri::AppHandle,
-    sub_type: &str,
     name: &str,
     prev_status: &LiveStatus,
     new_status: &LiveStatus,
-    live_title: Option<&str>,
+    room_id: Option<u64>,
+    avatar_path: Option<&str>,
 ) {
-    // Treat Replay as not-live for notification purposes
     let was_live = *prev_status == LiveStatus::Live;
     let is_live = *new_status == LiveStatus::Live;
 
-    let body = match (was_live, is_live) {
-        (false, true) => live_title.unwrap_or("开播了!").to_string(),
-        (true, false) => "已结束直播".to_string(),
+    let action = match (was_live, is_live) {
+        (false, true) => "开播",
+        (true, false) => "下播",
         _ => return,
     };
 
-    let builder = app_handle
-        .notification()
-        .builder()
-        .title(format!("{} - {}", sub_type, name))
-        .body(body);
-
-    match builder.show() {
-        Ok(_) => info!("Notification sent: {} {:?}→{:?}", name, prev_status, new_status),
-        Err(e) => error!("Notification failed: {:?}", e),
+    let rid = room_id.unwrap_or(0);
+    if rid == 0 {
+        return;
     }
+
+    // Push to front (newest first)
+    {
+        let mut notifs = NOTIFS.lock().unwrap();
+        // Remove duplicate for same room_id if exists
+        notifs.retain(|n| n.room_id != rid);
+        notifs.insert(
+            0,
+            NotifItem {
+                room_id: rid,
+                name: name.to_string(),
+                action: action.to_string(),
+                avatar_path: avatar_path.map(|s| s.to_string()),
+            },
+        );
+    }
+
+    rebuild_tray_menu(app_handle);
+    info!("Tray notify: {} {} {}", name, action, rid);
 }
 
 #[tauri::command]
@@ -246,14 +374,13 @@ async fn test_trigger_status(
         cache.insert(uid, new_status.clone()).unwrap_or(LiveStatus::Offline)
     };
 
-    let (name, room_id, sub_type) = {
+    let (name, room_id) = {
         let store = state.store.lock().unwrap();
         let data = store.get_all();
         let sub = data.subscriptions.iter().find(|s| s.uid == uid).ok_or("订阅不存在")?;
         (
             sub.name.clone().unwrap_or_else(|| "未知".to_string()),
             sub.room_id,
-            sub.r#type.clone(),
         )
     };
 
@@ -271,9 +398,14 @@ async fn test_trigger_status(
     };
     let _ = app_handle.emit("status-changed", &status_update);
 
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-
-    notify_status_change(&app_handle, &sub_type, &name, &prev_status, &new_status, None);
+    notify_status_change(
+        &app_handle,
+        &name,
+        &prev_status,
+        &new_status,
+        room_id,
+        Some(&state.avatar_full_path(uid)),
+    );
 
     Ok(())
 }
@@ -284,7 +416,6 @@ async fn test_trigger_status(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_log::Builder::default()
                 .level(log::LevelFilter::Info)
@@ -302,7 +433,7 @@ pub fn run() {
 
             app.manage(state);
 
-            let show = tauri::menu::MenuItemBuilder::with_id("show", "显示设置")
+            let show = tauri::menu::MenuItemBuilder::with_id("show", "显示界面")
                 .build(app)?;
             let quit = tauri::menu::MenuItemBuilder::with_id("quit", "退出")
                 .build(app)?;
@@ -314,33 +445,41 @@ pub fn run() {
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
                 .expect("Failed to load tray icon");
 
-            let _tray = tauri::tray::TrayIconBuilder::new()
+            let _tray = tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(icon)
                 .menu(&menu)
                 .tooltip("推送姬")
-                .on_menu_event(|app_handle, event| match event.id().as_ref() {
-                    "show" => {
-                        if let Some(window) = app_handle.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                .on_menu_event(|app_handle, event| {
+                    let id = event.id().as_ref().to_string();
+                    match id.as_str() {
+                        "show" => {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
                         }
-                    }
-                    "quit" => {
-                        app_handle.exit(0);
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray_icon, event| {
-                    if let tauri::tray::TrayIconEvent::Click {
-                        button: tauri::tray::MouseButton::Left,
-                        ..
-                    } = event
-                    {
-                        let app = tray_icon.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                        "quit" => {
+                            app_handle.exit(0);
                         }
+                        "clear_all" => {
+                            NOTIFS.lock().unwrap().clear();
+                            rebuild_tray_menu(&app_handle);
+                        }
+                        _ if id.starts_with("notif:") => {
+                            let rid_str = id.strip_prefix("notif:").unwrap_or("0");
+                            let rid: u64 = rid_str.parse().unwrap_or(0);
+                            if rid != 0 {
+                                let url = format!("https://live.bilibili.com/{}", rid);
+                                let _ = app_handle.opener().open_url(&url, None::<&str>);
+                            }
+                            // Remove this notification
+                            {
+                                let mut notifs = NOTIFS.lock().unwrap();
+                                notifs.retain(|n| n.room_id != rid);
+                            }
+                            rebuild_tray_menu(&app_handle);
+                        }
+                        _ => {}
                     }
                 })
                 .build(app)?;

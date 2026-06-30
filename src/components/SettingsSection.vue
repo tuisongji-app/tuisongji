@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useBilibili } from "@/composables/useBilibili";
-import { Settings, Bell, BellOff } from "lucide-vue-next";
+import { Settings } from "lucide-vue-next";
 
 const { getConfig, updatePollInterval } = useBilibili();
 const interval = ref(30);
 const saved = ref(false);
 const saving = ref(false);
-const permissionGranted = ref(false);
 
 onMounted(async () => {
   try {
@@ -22,13 +19,7 @@ onMounted(async () => {
   } catch {
     // use default
   }
-  permissionGranted.value = await isPermissionGranted();
 });
-
-async function handleRequestPermission() {
-  await requestPermission();
-  permissionGranted.value = await isPermissionGranted();
-}
 
 async function saveInterval() {
   if (interval.value < 1) {
@@ -54,35 +45,6 @@ async function saveInterval() {
     <div class="flex items-center gap-2 mb-4">
       <Settings class="w-4 h-4 text-muted-foreground" />
       <h2 class="text-sm font-semibold text-muted-foreground">设置</h2>
-    </div>
-
-    <!-- Notification permission -->
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-2">
-        <Bell v-if="permissionGranted === true" class="w-4 h-4 text-green-500" />
-        <BellOff v-else class="w-4 h-4 text-destructive" />
-        <span class="text-sm">通知权限</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <Badge
-          v-if="permissionGranted === true"
-          variant="success"
-          class="text-xs"
-        >
-          已授权
-        </Badge>
-        <Badge v-else variant="destructive" class="text-xs">
-          未授权
-        </Badge>
-        <Button
-          v-if="!permissionGranted"
-          variant="outline"
-          size="sm"
-          @click="handleRequestPermission"
-        >
-          授权
-        </Button>
-      </div>
     </div>
 
     <!-- Poll interval -->

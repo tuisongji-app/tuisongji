@@ -8,7 +8,6 @@ use tauri::Emitter;
 
 pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         loop {
             let (interval_secs, subscriptions) = {
@@ -101,7 +100,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                         };
 
                         if prev_status != new_status {
-                            let (display_name, sub_type) = {
+                            let display_name = {
                                 let store = state.store.lock().unwrap();
                                 let data = store.get_all();
                                 let s = data
@@ -115,10 +114,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                         name: Some("未知".into()),
                                         room_id: None,
                                     });
-                                (
-                                    s.name.unwrap_or_else(|| "未知".to_string()),
-                                    s.r#type,
-                                )
+                                s.name.unwrap_or_else(|| "未知".to_string())
                             };
 
                             let status_update = crate::state::SubscriptionStatus {
@@ -133,11 +129,11 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
 
                             crate::notify_status_change(
                                 &app_handle,
-                                &sub_type,
                                 &display_name,
                                 &prev_status,
                                 &new_status,
-                                Some(&room_info.title),
+                                Some(room_id),
+                                Some(&state.avatar_full_path(sub.uid)),
                             );
                         }
                     }

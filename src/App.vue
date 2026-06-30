@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import AppHeader from "./components/AppHeader.vue";
 import SubscriptionForm from "./components/SubscriptionForm.vue";
 import SubscriptionList from "./components/SubscriptionList.vue";
@@ -14,11 +12,6 @@ import type { SubscriptionStatus } from "./types";
 const { listSubscriptions, removeSubscription } = useBilibili();
 const subscriptions = ref<SubscriptionStatus[]>([]);
 const loading = ref(true);
-let pendingRoomId: number | null = null;
-
-function openRoomUrl(roomId: number) {
-  openUrl(`https://live.bilibili.com/${roomId}`);
-}
 
 onMounted(async () => {
   try {
@@ -34,18 +27,6 @@ onMounted(async () => {
     const idx = subscriptions.value.findIndex((s) => s.uid === updated.uid);
     if (idx >= 0) {
       subscriptions.value[idx] = updated;
-    }
-    // Remember room for notification click
-    if (updated.room_id && (updated.status === "live" || updated.status === "offline")) {
-      pendingRoomId = updated.room_id;
-    }
-  });
-
-  // Notification click brings app to foreground → window focus
-  await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-    if (focused && pendingRoomId) {
-      openRoomUrl(pendingRoomId);
-      pendingRoomId = null;
     }
   });
 });
