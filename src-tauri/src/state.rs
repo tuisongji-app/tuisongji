@@ -84,9 +84,10 @@ impl AppState {
         }
     }
 
-    pub fn avatar_full_path(&self, uid: u64) -> String {
+    pub fn avatar_full_path(&self, sub_type: &str, uid: u64) -> String {
         self.data_dir
             .join("avatars")
+            .join(sub_type)
             .join(format!("{}.jpg", uid))
             .to_string_lossy()
             .to_string()

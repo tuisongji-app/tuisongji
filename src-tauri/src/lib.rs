@@ -154,7 +154,7 @@ async fn add_subscription(
 
     let data_dir = state.data_dir.clone();
     if let Some(ref url) = remote_avatar_url {
-        if let Err(e) = bilibili_api::download_avatar(url, uid, &data_dir).await {
+        if let Err(e) = bilibili_api::download_avatar(url, uid, "bilibili", &data_dir).await {
             warn!("Avatar download failed: {}", e);
         }
     }
@@ -189,7 +189,7 @@ async fn add_subscription(
         status,
         title: Some(room_info.title),
         room_id: Some(room_id),
-        avatar_url: Some(state.avatar_full_path(uid)),
+        avatar_url: Some(state.avatar_full_path("bilibili", uid)),
     };
 
     let _ = app_handle.emit("status-changed", &result);
@@ -239,7 +239,7 @@ async fn list_subscriptions(
                 status,
                 title: None,
                 room_id: s.room_id,
-                avatar_url: Some(state.avatar_full_path(s.uid)),
+                avatar_url: Some(state.avatar_full_path("bilibili", s.uid)),
             }
         })
         .collect();
@@ -286,7 +286,7 @@ async fn refresh_status(
         status,
         title: Some(room_info.title),
         room_id: Some(room_id),
-        avatar_url: Some(state.avatar_full_path(uid)),
+        avatar_url: Some(state.avatar_full_path("bilibili", uid)),
     })
 }
 
@@ -394,7 +394,7 @@ async fn test_trigger_status(
             None
         },
         room_id,
-        avatar_url: Some(state.avatar_full_path(uid)),
+        avatar_url: Some(state.avatar_full_path("bilibili", uid)),
     };
     let _ = app_handle.emit("status-changed", &status_update);
 
@@ -404,7 +404,7 @@ async fn test_trigger_status(
         &prev_status,
         &new_status,
         room_id,
-        Some(&state.avatar_full_path(uid)),
+        Some(&state.avatar_full_path("bilibili", uid)),
     );
 
     Ok(())

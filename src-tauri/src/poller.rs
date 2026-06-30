@@ -44,7 +44,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                 if let Some(ref url) = remote_avatar {
                                     let data_dir = state.data_dir.clone();
                                     let _ =
-                                        bilibili_api::download_avatar(url, sub.uid, &data_dir).await;
+                                        bilibili_api::download_avatar(url, sub.uid, "bilibili", &data_dir).await;
                                 }
                                 rid
                             }
@@ -76,7 +76,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                             {
                                 let data_dir = state.data_dir.clone();
                                 if let Some(ref url) = remote_avatar {
-                                    let _ = bilibili_api::download_avatar(url, sub.uid, &data_dir)
+                                    let _ = bilibili_api::download_avatar(url, sub.uid, "bilibili", &data_dir)
                                         .await;
                                 }
                                 let mut store = state.store.lock().unwrap();
@@ -123,7 +123,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                 status: new_status.clone(),
                                 title: Some(room_info.title.clone()),
                                 room_id: Some(room_id),
-                                avatar_url: Some(state.avatar_full_path(sub.uid)),
+                                avatar_url: Some(state.avatar_full_path("bilibili", sub.uid)),
                             };
                             let _ = app_handle.emit("status-changed", &status_update);
 
@@ -133,7 +133,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                 &prev_status,
                                 &new_status,
                                 Some(room_id),
-                                Some(&state.avatar_full_path(sub.uid)),
+                                Some(&state.avatar_full_path("bilibili", sub.uid)),
                             );
                         }
                     }

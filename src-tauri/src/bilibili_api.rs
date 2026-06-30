@@ -108,7 +108,12 @@ pub async fn get_room_info(room_id: u64) -> Result<RoomInfo, String> {
 
 // ---- Avatar download ----
 
-pub async fn download_avatar(url: &str, uid: u64, data_dir: &std::path::Path) -> Result<String, String> {
+pub async fn download_avatar(
+    url: &str,
+    uid: u64,
+    sub_type: &str,
+    data_dir: &std::path::Path,
+) -> Result<String, String> {
     let client = reqwest::Client::new();
     let resp = client
         .get(url)
@@ -123,7 +128,7 @@ pub async fn download_avatar(url: &str, uid: u64, data_dir: &std::path::Path) ->
         .await
         .map_err(|e| format!("Avatar read failed: {}", e))?;
 
-    let avatars_dir = data_dir.join("avatars");
+    let avatars_dir = data_dir.join("avatars").join(sub_type);
     std::fs::create_dir_all(&avatars_dir)
         .map_err(|e| format!("Failed to create avatars dir: {}", e))?;
 
