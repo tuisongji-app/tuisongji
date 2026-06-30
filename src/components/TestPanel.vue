@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useBilibili } from "@/composables/useBilibili";
+import { testTriggerStatus } from "@/tauri";
 import { statusLabels } from "@/types";
 import { FlaskConical } from "lucide-vue-next";
 import type { SubscriptionStatus } from "@/types";
@@ -10,8 +10,6 @@ import type { SubscriptionStatus } from "@/types";
 defineProps<{
   subscriptions: SubscriptionStatus[];
 }>();
-
-const { testTriggerStatus } = useBilibili();
 
 const statusActions = [
   { key: "live", label: "开播", variant: "default" as const },

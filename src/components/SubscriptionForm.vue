@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useBilibili } from "@/composables/useBilibili";
+import { addSubscription } from "@/tauri";
 import { Plus } from "lucide-vue-next";
 import type { SubscriptionStatus } from "@/types";
 
@@ -13,7 +13,6 @@ const emit = defineEmits<{
 const uid = ref("");
 const loading = ref(false);
 const error = ref<string | null>(null);
-const { addSubscription } = useBilibili();
 
 async function handleAdd() {
   error.value = null;

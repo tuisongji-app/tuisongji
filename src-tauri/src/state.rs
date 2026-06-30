@@ -34,6 +34,8 @@ impl LiveStatus {
 pub struct AppConfig {
     pub poll_interval_mins: u64,
     pub badge_timeout_mins: u64,
+    pub autostart: bool,
+    pub show_window_on_startup: bool,
 }
 
 impl Default for AppConfig {
@@ -41,6 +43,8 @@ impl Default for AppConfig {
         Self {
             poll_interval_mins: 30,
             badge_timeout_mins: 30,
+            autostart: false,
+            show_window_on_startup: true,
         }
     }
 }

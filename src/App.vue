@@ -5,10 +5,8 @@ import SubscriptionForm from "./components/SubscriptionForm.vue";
 import SubscriptionList from "./components/SubscriptionList.vue";
 import SettingsSection from "./components/SettingsSection.vue";
 // import TestPanel from "./components/TestPanel.vue";
-import { useBilibili } from "./composables/useBilibili";
+import { listSubscriptions, removeSubscription } from "@/tauri";
 import type { SubscriptionStatus } from "./types";
-
-const { listSubscriptions, removeSubscription } = useBilibili();
 const subscriptions = ref<SubscriptionStatus[]>([]);
 const loading = ref(true);
 

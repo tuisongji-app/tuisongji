@@ -9,6 +9,7 @@ use std::sync::Arc;
 use store::figment::value::Value;
 use tauri::Emitter;
 use tauri::Manager;
+use tauri_plugin_autostart::AutoLaunchManager;
 use tauri_plugin_opener::OpenerExt;
 
 // ---- Notification queue ----
@@ -78,6 +79,24 @@ fn load_avatar_icon(path: &str) -> Option<tauri::image::Image<'static>> {
 
     let raw = dst.into_raw();
     Some(tauri::image::Image::new_owned(raw, size, size))
+}
+
+fn create_window(app_handle: &tauri::AppHandle, show_on_startup: bool) {
+    let builder = tauri::WebviewWindowBuilder::new(app_handle, "main", tauri::WebviewUrl::default())
+        .title("推送姬")
+        .inner_size(800.0, 600.0)
+        .visible(false);
+    let window = builder.build().unwrap();
+    if show_on_startup {
+        let _ = window.show();
+    }
+}
+
+fn show_window(app_handle: &tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 fn rebuild_tray_menu(app_handle: &tauri::AppHandle) {
@@ -452,10 +471,49 @@ async fn test_trigger_status(
     Ok(())
 }
 
+#[tauri::command]
+async fn set_autostart(
+    enabled: bool,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    // Update OS autostart
+    if let Some(manager) = app_handle.try_state::<AutoLaunchManager>() {
+        if enabled {
+            manager.enable().map_err(|e| format!("Enable autostart: {}", e))?;
+        } else {
+            manager.disable().map_err(|e| format!("Disable autostart: {}", e))?;
+        }
+    }
+
+    // Persist to store
+    let mut store = state.store.lock().unwrap();
+    store
+        .set("config.autostart", enabled)
+        .map_err(|e| format!("Store: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_show_window_on_startup(
+    enabled: bool,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().unwrap();
+    store
+        .set("config.show_window_on_startup", enabled)
+        .map_err(|e| format!("Store: {}", e))?;
+    Ok(())
+}
+
 // ---- App Entry Point ----
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let ctx = tauri::generate_context!();
+    let identifier = ctx.config().identifier.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -463,6 +521,14 @@ pub fn run() {
                 .level(log::LevelFilter::Info)
                 .build(),
         )
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name(&identifier)
+                .build(),
+        )
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            show_window(app);
+        }))
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -473,39 +539,47 @@ pub fn run() {
 
             poller::start_poller(app.handle().clone(), state.clone());
 
-            app.manage(state);
+            app.manage(state.clone());
 
-            let show = tauri::menu::MenuItemBuilder::with_id("show", "显示界面")
+            // Sync autostart state on launch
+            {
+                let store = state.store.lock().unwrap();
+                let config = store.get_all().config.clone();
+                if config.autostart {
+                    if let Some(manager) = app.try_state::<AutoLaunchManager>() {
+                        let _ = manager.enable();
+                    }
+                }
+            }
+
+            // Build tray
+            let show_item = tauri::menu::MenuItemBuilder::with_id("show", "显示界面")
                 .build(app)?;
-            let quit = tauri::menu::MenuItemBuilder::with_id("quit", "退出")
+            let quit_item = tauri::menu::MenuItemBuilder::with_id("quit", "退出")
                 .build(app)?;
             let menu = tauri::menu::MenuBuilder::new(app)
-                .item(&show)
-                .item(&quit)
+                .item(&show_item)
+                .item(&quit_item)
                 .build()?;
 
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))
                 .expect("Failed to load tray icon");
 
+            let app_handle = app.handle().clone();
             let _tray = tauri::tray::TrayIconBuilder::with_id("main")
                 .icon(icon)
                 .menu(&menu)
                 .tooltip("推送姬")
-                .on_menu_event(|app_handle, event| {
+                .on_menu_event(move |app_handle, event| {
                     let id = event.id().as_ref().to_string();
                     match id.as_str() {
-                        "show" => {
-                            if let Some(window) = app_handle.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
+                        "show" => show_window(app_handle),
                         "quit" => {
                             app_handle.exit(0);
                         }
                         "clear_all" => {
                             NOTIFS.lock().unwrap().clear();
-                            rebuild_tray_menu(&app_handle);
+                            rebuild_tray_menu(app_handle);
                         }
                         _ if id.starts_with("notif:") => {
                             let rid_str = id.strip_prefix("notif:").unwrap_or("0");
@@ -514,17 +588,23 @@ pub fn run() {
                                 let url = format!("https://live.bilibili.com/{}", rid);
                                 let _ = app_handle.opener().open_url(&url, None::<&str>);
                             }
-                            // Remove this notification
                             {
                                 let mut notifs = NOTIFS.lock().unwrap();
                                 notifs.retain(|n| n.room_id != rid);
                             }
-                            rebuild_tray_menu(&app_handle);
+                            rebuild_tray_menu(app_handle);
                         }
                         _ => {}
                     }
                 })
                 .build(app)?;
+
+            // Create main window (visible based on config)
+            let show_on_startup = {
+                let store = state.store.lock().unwrap();
+                store.get_all().config.show_window_on_startup
+            };
+            create_window(&app_handle, show_on_startup);
 
             Ok(())
         })
@@ -543,7 +623,9 @@ pub fn run() {
             update_badge_timeout,
             get_config,
             test_trigger_status,
+            set_autostart,
+            set_show_window_on_startup,
         ])
-        .run(tauri::generate_context!())
+        .run(ctx)
         .expect("error while running tauri application");
 }

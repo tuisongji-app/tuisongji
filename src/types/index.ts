@@ -12,6 +12,8 @@ export interface SubscriptionStatus {
 export interface AppConfig {
   poll_interval_mins: number;
   badge_timeout_mins: number;
+  autostart: boolean;
+  show_window_on_startup: boolean;
 }
 
 export const statusLabels: Record<LiveStatus, string> = {
