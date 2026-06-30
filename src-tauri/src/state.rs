@@ -33,12 +33,14 @@ impl LiveStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub poll_interval_mins: u64,
+    pub badge_timeout_mins: u64,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             poll_interval_mins: 30,
+            badge_timeout_mins: 30,
         }
     }
 }

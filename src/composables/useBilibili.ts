@@ -26,6 +26,10 @@ export function useBilibili() {
     return invoke("get_config");
   }
 
+  async function updateBadgeTimeout(timeoutMins: number): Promise<void> {
+    return invoke("update_badge_timeout", { timeoutMins });
+  }
+
   async function testTriggerStatus(
     uid: number,
     targetStatus: string
@@ -40,6 +44,7 @@ export function useBilibili() {
     refreshStatus,
     updatePollInterval,
     getConfig,
+    updateBadgeTimeout,
     testTriggerStatus,
   };
 }

@@ -21,6 +21,33 @@ struct NotifItem {
 }
 
 static NOTIFS: Mutex<Vec<NotifItem>> = Mutex::new(Vec::new());
+static BADGE_TIMER: Mutex<Option<tauri::async_runtime::JoinHandle<()>>> = Mutex::new(None);
+
+fn reset_title_timer(app_handle: tauri::AppHandle) {
+    let mut timer = BADGE_TIMER.lock().unwrap();
+    if let Some(h) = timer.take() {
+        h.abort();
+    }
+
+    let h = app_handle.clone();
+    let timeout_mins = app_handle
+        .try_state::<Arc<AppState>>()
+        .map(|s| {
+            let store = s.store.lock().unwrap();
+            store.get_all().config.badge_timeout_mins
+        })
+        .unwrap_or(30);
+
+    *timer = Some(tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(timeout_mins * 60)).await;
+        if let Some(tray) = h.tray_by_id("main") {
+            let notifs = NOTIFS.lock().unwrap();
+            if !notifs.is_empty() {
+                let _ = tray.set_title(Some(&format!("({})", notifs.len())));
+            }
+        }
+    }));
+}
 
 fn load_avatar_icon(path: &str) -> Option<tauri::image::Image<'static>> {
     use image::imageops::FilterType;
@@ -123,11 +150,10 @@ fn rebuild_tray_menu(app_handle: &tauri::AppHandle) {
 
     // Update tray
     if let Some(tray) = app_handle.tray_by_id("main") {
-        // Update title: show latest notification text, or clear if empty
         if let Some(first) = notifs.first() {
-            let _ = tray.set_title(Some(&format!("{} {}", first.name, first.action)));
+            let _ =
+                tray.set_title(Some(&format!("{} {}", first.name, first.action)));
         } else {
-            // macOS: use empty string to clear (None doesn't work)
             let _ = tray.set_title(Some(""));
         }
         let _ = tray.set_menu(Some(menu));
@@ -306,6 +332,21 @@ async fn update_poll_interval(
 }
 
 #[tauri::command]
+async fn update_badge_timeout(
+    timeout_mins: u64,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    if timeout_mins < 1 {
+        return Err("超时时间不能小于1分钟".to_string());
+    }
+    let mut store = state.store.lock().unwrap();
+    store
+        .set("config.badge_timeout_mins", timeout_mins)
+        .map_err(|e| format!("Store: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_config(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<state::AppConfig, String> {
@@ -352,6 +393,7 @@ pub fn notify_status_change(
     }
 
     rebuild_tray_menu(app_handle);
+    reset_title_timer(app_handle.clone());
     info!("Tray notify: {} {} {}", name, action, rid);
 }
 
@@ -498,6 +540,7 @@ pub fn run() {
             list_subscriptions,
             refresh_status,
             update_poll_interval,
+            update_badge_timeout,
             get_config,
             test_trigger_status,
         ])
