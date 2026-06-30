@@ -14,7 +14,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
             let (interval_secs, subscriptions) = {
                 let store = state.store.lock().unwrap();
                 let data = store.get_all();
-                (data.config.poll_interval_secs, data.subscriptions)
+                (data.config.poll_interval_mins, data.subscriptions)
             };
 
             for (i, sub) in subscriptions.iter().enumerate() {
@@ -136,7 +136,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                 }
             }
 
-            tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(interval_secs * 60)).await;
         }
     });
 }

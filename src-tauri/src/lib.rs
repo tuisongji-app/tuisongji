@@ -175,16 +175,15 @@ async fn refresh_status(
 
 #[tauri::command]
 async fn update_poll_interval(
-    interval_secs: u64,
+    interval_mins: u64,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let min_interval = 10;
-    if interval_secs < min_interval {
-        return Err(format!("轮询间隔不能小于{}秒", min_interval));
+    if interval_mins < 1 {
+        return Err("轮询间隔不能小于1分钟".to_string());
     }
     let mut store = state.store.lock().unwrap();
     store
-        .set("config.poll_interval_secs", interval_secs)
+        .set("config.poll_interval_mins", interval_mins)
         .map_err(|e| format!("Store: {}", e))?;
     Ok(())
 }

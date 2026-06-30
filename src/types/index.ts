@@ -10,7 +10,7 @@ export interface SubscriptionStatus {
 }
 
 export interface AppConfig {
-  poll_interval_secs: number;
+  poll_interval_mins: number;
 }
 
 export const statusLabels: Record<LiveStatus, string> = {

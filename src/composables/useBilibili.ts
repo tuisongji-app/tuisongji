@@ -18,8 +18,8 @@ export function useBilibili() {
     return invoke("refresh_status", { uid });
   }
 
-  async function updatePollInterval(intervalSecs: number): Promise<void> {
-    return invoke("update_poll_interval", { intervalSecs });
+  async function updatePollInterval(intervalMins: number): Promise<void> {
+    return invoke("update_poll_interval", { intervalMins });
   }
 
   async function getConfig(): Promise<AppConfig> {

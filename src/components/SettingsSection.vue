@@ -2,7 +2,7 @@
 import { ref, onMounted } from "vue";
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberField } from "@/components/ui/number-field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -10,7 +10,7 @@ import { useBilibili } from "@/composables/useBilibili";
 import { Settings, Bell, BellOff } from "lucide-vue-next";
 
 const { getConfig, updatePollInterval } = useBilibili();
-const interval = ref(60);
+const interval = ref(30);
 const saved = ref(false);
 const saving = ref(false);
 const permissionGranted = ref(false);
@@ -18,7 +18,7 @@ const permissionGranted = ref(false);
 onMounted(async () => {
   try {
     const config = await getConfig();
-    interval.value = config.poll_interval_secs;
+    interval.value = config.poll_interval_mins;
   } catch {
     // use default
   }
@@ -31,8 +31,8 @@ async function handleRequestPermission() {
 }
 
 async function saveInterval() {
-  if (interval.value < 10) {
-    interval.value = 10;
+  if (interval.value < 1) {
+    interval.value = 1;
   }
   saving.value = true;
   try {
@@ -89,14 +89,12 @@ async function saveInterval() {
     <div class="flex items-end gap-2">
       <div class="flex-1">
         <Label for="interval" class="text-xs text-muted-foreground mb-1 block">
-          轮询间隔 (秒)
+          轮询间隔 (分钟)
         </Label>
-        <Input
+        <NumberField
           id="interval"
-          v-model.number="interval"
-          type="number"
-          min="10"
-          class="w-24"
+          v-model="interval"
+          :min="1"
         />
       </div>
       <Button variant="outline" :disabled="saving" @click="saveInterval">
@@ -104,7 +102,7 @@ async function saveInterval() {
       </Button>
     </div>
     <p class="text-xs text-muted-foreground mt-1.5">
-      最小间隔10秒，默认60秒
+      最小1分钟，默认30分钟
     </p>
   </div>
 </template>
