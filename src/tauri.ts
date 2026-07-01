@@ -76,3 +76,9 @@ export function setSoundEnabled(enabled: boolean): Promise<void> {
 export function setSoundVolume(volume: number): Promise<void> {
   return invoke("set_sound_volume", { volume });
 }
+
+// ---- Updater ----
+
+export function restartApplication(): Promise<void> {
+  return invoke("restart_application");
+}

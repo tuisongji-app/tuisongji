@@ -21,6 +21,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -28,5 +29,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc2MDVEMDM5MDk0MTA0NjkKUldScEJFRUpPZEFGZG56REVkcTd1T3o4alNyUHN6MHJMZk02NExMM0Y1R1RnT0Y5K3Y5TzJXS2MK",
+      "endpoints": [
+        "https://github.com/tuisongji-app/tuisongji/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

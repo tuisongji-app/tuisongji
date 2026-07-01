@@ -3,6 +3,7 @@ mod github_sounds;
 mod poller;
 mod sound;
 mod state;
+mod updater;
 
 use log::{info, warn};
 use state::{AppState, LiveStatus, Subscription, SubscriptionStatus};
@@ -643,6 +644,7 @@ pub fn run() {
                 .app_name(&identifier)
                 .build(),
         )
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_window(app);
         }))
@@ -749,6 +751,7 @@ pub fn run() {
             play_streamer_sound,
             set_sound_enabled,
             set_sound_volume,
+            updater::restart_application,
         ])
         .run(ctx)
         .expect("error while running tauri application");

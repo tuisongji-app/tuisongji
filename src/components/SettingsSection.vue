@@ -12,9 +12,13 @@ import {
   setShowWindowOnStartup,
   setSoundEnabled,
   setSoundVolume,
+  restartApplication,
 } from "@/tauri";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
-import { Settings } from "lucide-vue-next";
+import { check } from "@tauri-apps/plugin-updater";
+import { getVersion } from "@tauri-apps/api/app";
+import { Button } from "@/components/ui/button";
+import { Settings, RefreshCw } from "lucide-vue-next";
 
 const interval = ref(30);
 const badgeTimeout = ref(30);
@@ -22,6 +26,14 @@ const autostart = ref(false);
 const showWindowOnStartup = ref(true);
 const soundEnabled = ref(true);
 const soundVolume = ref(0.8);
+
+// ---- Update state ----
+const appVersion = ref("");
+const updateChecking = ref(false);
+const updateVersion = ref("");
+const updateBody = ref("");
+const downloading = ref(false);
+const installed = ref(false);
 
 onMounted(async () => {
   try {
@@ -34,6 +46,12 @@ onMounted(async () => {
     soundVolume.value = config.sound_volume;
   } catch {
     // use default
+  }
+
+  try {
+    appVersion.value = await getVersion();
+  } catch {
+    appVersion.value = "0.0.0";
   }
 });
 
@@ -73,6 +91,42 @@ async function onVolumeChange(val: number[] | undefined) {
   const v = val[0] / 100;
   soundVolume.value = v;
   await setSoundVolume(v);
+}
+
+async function handleCheckUpdate() {
+  updateChecking.value = true;
+  updateVersion.value = "";
+  updateBody.value = "";
+  try {
+    const update = await check();
+    if (update) {
+      updateVersion.value = update.version;
+      updateBody.value = update.body ?? "";
+    }
+  } catch (e) {
+    console.error("Check update failed:", e);
+  } finally {
+    updateChecking.value = false;
+  }
+}
+
+async function handleDownloadAndInstall() {
+  downloading.value = true;
+  try {
+    const update = await check();
+    if (update) {
+      await update.downloadAndInstall();
+      installed.value = true;
+    }
+  } catch (e) {
+    console.error("Download/install failed:", e);
+  } finally {
+    downloading.value = false;
+  }
+}
+
+async function handleRestart() {
+  await restartApplication();
 }
 </script>
 
@@ -182,6 +236,72 @@ async function onVolumeChange(val: number[] | undefined) {
           class="w-32 shrink-0"
           @update:model-value="onVolumeChange"
         />
+      </div>
+
+      <Separator class="my-4" />
+
+      <!-- 版本更新 -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="text-sm">版本更新</span>
+            <p class="text-xs text-muted-foreground mt-0.5">
+              当前版本 v{{ appVersion }}
+            </p>
+          </div>
+          <Button
+            v-if="!installed && !updateVersion"
+            variant="outline"
+            size="sm"
+            class="h-8 text-xs shrink-0"
+            :disabled="updateChecking"
+            @click="handleCheckUpdate"
+          >
+            <RefreshCw
+              :class="['w-3.5 h-3.5 mr-1', updateChecking && 'animate-spin']"
+            />
+            {{ updateChecking ? '检查中...' : '检查更新' }}
+          </Button>
+        </div>
+
+        <div
+          v-if="updateVersion && !installed"
+          class="text-xs text-muted-foreground space-y-1"
+        >
+          <p>
+            新版本 <span class="font-medium text-foreground">v{{ updateVersion }}</span>
+          </p>
+          <p v-if="updateBody" class="whitespace-pre-wrap">{{ updateBody }}</p>
+        </div>
+
+        <div v-if="updateVersion && !installed" class="flex gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            class="h-8 text-xs"
+            :disabled="downloading"
+            @click="handleDownloadAndInstall"
+          >
+            {{ downloading ? '下载中...' : '下载并安装' }}
+          </Button>
+        </div>
+
+        <div
+          v-if="installed"
+          class="text-xs text-muted-foreground"
+        >
+          <p class="text-green-600 font-medium">更新已安装，重启后生效</p>
+        </div>
+
+        <Button
+          v-if="installed"
+          variant="default"
+          size="sm"
+          class="h-8 text-xs"
+          @click="handleRestart"
+        >
+          立即重启
+        </Button>
       </div>
     </div>
   </div>
