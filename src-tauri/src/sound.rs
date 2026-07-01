@@ -1,11 +1,12 @@
 use rand::seq::SliceRandom;
 use rodio::{Decoder, OutputStream, Sink};
 use std::fs;
-use std::io::BufReader;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
 use std::sync::OnceLock;
+use std::thread;
 
 enum AudioCmd {
     Play { path: PathBuf, volume: f32 },
@@ -14,56 +15,86 @@ enum AudioCmd {
 
 static TX: OnceLock<Mutex<Sender<AudioCmd>>> = OnceLock::new();
 
-fn ensure_audio_thread() -> &'static Mutex<Sender<AudioCmd>> {
-    TX.get_or_init(|| {
-        let (tx, rx) = mpsc::channel::<AudioCmd>();
-        std::thread::spawn(move || {
-            let (stream, stream_handle) =
-                OutputStream::try_default().expect("Failed to initialize audio output");
-            let sink = Sink::try_new(&stream_handle).expect("Failed to create audio sink");
-            // Keep stream alive
-            let _stream = stream;
+/// Initialize audio on the main thread. Must be called once during app setup.
+pub fn init_audio() {
+    let (stream, stream_handle) =
+        OutputStream::try_default().expect("Failed to initialize audio output");
 
-            for cmd in rx {
-                match cmd {
-                    AudioCmd::Play { path, volume } => {
-                        sink.clear();
-                        sink.set_volume(volume.clamp(0.0, 1.0));
-                        if let Ok(file) = fs::File::open(&path) {
-                            if let Ok(source) = Decoder::new(BufReader::new(file)) {
-                                sink.append(source);
-                            }
-                        }
+    // OutputStream must stay on the main thread (not Send on macOS)
+    // Leak it to keep it alive for the lifetime of the app.
+    let _ = Box::leak(Box::new(stream));
+
+    let (tx, rx) = mpsc::channel::<AudioCmd>();
+    TX.set(Mutex::new(tx))
+        .ok()
+        .expect("Audio already initialized");
+
+    thread::spawn(move || {
+        // stream_handle is Send, safe to use here
+        let mut current: Option<Sink> = None;
+
+        for cmd in rx {
+            match cmd {
+                AudioCmd::Play { path, volume } => {
+                    if let Some(old) = current.take() {
+                        old.clear();
                     }
-                    AudioCmd::Stop => {
+                    let sink = match Sink::try_new(&stream_handle) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            log::warn!("Failed to create sink: {}", e);
+                            continue;
+                        }
+                    };
+                    sink.set_volume(volume.clamp(0.0, 1.0));
+                    let bytes = match fs::read(&path) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            log::warn!("Failed to read {:?}: {}", path, e);
+                            continue;
+                        }
+                    };
+                    match Decoder::new(Cursor::new(bytes)) {
+                        Ok(source) => {
+                            sink.append(source);
+                            log::info!("Playing: {:?}", path);
+                            current = Some(sink);
+                        }
+                        Err(e) => log::warn!("Failed to decode {:?}: {}", path, e),
+                    }
+                }
+                AudioCmd::Stop => {
+                    if let Some(sink) = current.take() {
                         sink.clear();
                     }
                 }
             }
-        });
-        Mutex::new(tx)
-    })
+        }
+    });
+}
+
+fn sender() -> Result<std::sync::MutexGuard<'static, Sender<AudioCmd>>, String> {
+    TX.get()
+        .ok_or("Audio not initialized")?
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))
 }
 
 /// Play a specific sound file with the given volume (0.0 - 1.0).
 pub fn play_file(path: &Path, volume: f32) -> Result<(), String> {
-    let tx = ensure_audio_thread()
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    tx.send(AudioCmd::Play {
-        path: path.to_path_buf(),
-        volume,
-    })
-    .map_err(|e| format!("Send error: {}", e))
+    sender()?
+        .send(AudioCmd::Play {
+            path: path.to_path_buf(),
+            volume,
+        })
+        .map_err(|e| format!("Send error: {}", e))
 }
 
 /// Stop any currently playing sound.
 #[allow(dead_code)]
 pub fn stop() {
-    if let Some(tx_lock) = TX.get() {
-        if let Ok(tx) = tx_lock.lock() {
-            let _ = tx.send(AudioCmd::Stop);
-        }
+    if let Ok(tx) = sender() {
+        let _ = tx.send(AudioCmd::Stop);
     }
 }
 

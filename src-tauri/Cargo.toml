@@ -29,6 +29,6 @@ reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["time"] }
 log = "0.4"
 tauri-plugin-log = "2"
-rodio = { version = "0.19", features = ["mp3"] }
+rodio = { version = "0.19", features = ["mp3", "wav"] }
 rand = "0.8"
 

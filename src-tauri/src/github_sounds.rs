@@ -2,23 +2,21 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
 
-const REPO_OWNER: &str = "hanaTsuk1";
-const REPO_NAME: &str = "tuisongji-sounds";
+const REPO_OWNER: &str = "tuisongji-app";
+const REPO_NAME: &str = "sound";
 const RAW_BASE: &str = "https://raw.githubusercontent.com";
 
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct StreamerSounds {
+pub struct Sounds {
     pub live: Vec<String>,
     pub offline: Vec<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Manifest {
-    #[allow(dead_code)]
-    pub version: u32,
-    pub streamers: HashMap<String, StreamerSounds>,
+    pub channels: HashMap<String, Sounds>,
 }
 
 fn raw_url(path: &str) -> String {
@@ -54,7 +52,7 @@ pub async fn download_sounds_for_name(
     let manifest = fetch_manifest().await?;
 
     let sounds = manifest
-        .streamers
+        .channels
         .get(name)
         .ok_or_else(|| format!("该主播（{}）暂无可用音效", name))?;
 
@@ -87,7 +85,7 @@ pub async fn download_sounds_for_name(
 /// Returns `(live_count, offline_count)`.
 pub async fn available_sounds_for_name(name: &str) -> Result<(u32, u32), String> {
     let manifest = fetch_manifest().await?;
-    match manifest.streamers.get(name) {
+    match manifest.channels.get(name) {
         Some(s) => Ok((s.live.len() as u32, s.offline.len() as u32)),
         None => Ok((0, 0)),
     }

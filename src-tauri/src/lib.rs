@@ -647,6 +647,8 @@ pub fn run() {
             show_window(app);
         }))
         .setup(|app| {
+            sound::init_audio();
+
             let data_dir = app
                 .path()
                 .app_data_dir()
