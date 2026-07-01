@@ -129,6 +129,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
 
                             crate::notify_status_change(
                                 &app_handle,
+                                sub.uid,
                                 &display_name,
                                 &prev_status,
                                 &new_status,

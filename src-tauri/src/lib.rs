@@ -1,5 +1,7 @@
 mod bilibili_api;
+mod github_sounds;
 mod poller;
+mod sound;
 mod state;
 
 use log::{info, warn};
@@ -373,8 +375,88 @@ async fn get_config(
     Ok(store.get_all().config)
 }
 
+// ---- Sound commands ----
+
+#[tauri::command]
+async fn download_streamer_sounds(
+    name: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<state::SoundInfo, String> {
+    let (avail_live, avail_offline) =
+        github_sounds::available_sounds_for_name(&name).await.unwrap_or((0, 0));
+
+    github_sounds::download_sounds_for_name(&name, &state.data_dir).await?;
+
+    let (dl_live, dl_offline) = sound::count_downloaded(&name, &state.data_dir);
+
+    Ok(state::SoundInfo {
+        name,
+        available_live: avail_live,
+        available_offline: avail_offline,
+        downloaded_live: dl_live,
+        downloaded_offline: dl_offline,
+    })
+}
+
+#[tauri::command]
+async fn get_sound_info(
+    name: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<state::SoundInfo, String> {
+    let (avail_live, avail_offline) =
+        github_sounds::available_sounds_for_name(&name).await.unwrap_or((0, 0));
+    let (dl_live, dl_offline) = sound::count_downloaded(&name, &state.data_dir);
+
+    Ok(state::SoundInfo {
+        name,
+        available_live: avail_live,
+        available_offline: avail_offline,
+        downloaded_live: dl_live,
+        downloaded_offline: dl_offline,
+    })
+}
+
+#[tauri::command]
+async fn play_streamer_sound(
+    name: String,
+    event_type: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let config = {
+        let store = state.store.lock().unwrap();
+        store.get_all().config
+    };
+    sound::play_random_for_streamer(&name, &event_type, config.sound_volume, &state.data_dir)
+}
+
+#[tauri::command]
+async fn set_sound_enabled(
+    enabled: bool,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().unwrap();
+    store
+        .set("config.sound_enabled", enabled)
+        .map_err(|e| format!("Store: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_sound_volume(
+    volume: f32,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let clamped = volume.clamp(0.0, 1.0);
+    let mut store = state.store.lock().unwrap();
+    store
+        .set("config.sound_volume", clamped)
+        .map_err(|e| format!("Store: {}", e))?;
+    Ok(())
+}
+
 pub fn notify_status_change(
     app_handle: &tauri::AppHandle,
+    _uid: u64,
     name: &str,
     prev_status: &LiveStatus,
     new_status: &LiveStatus,
@@ -414,6 +496,40 @@ pub fn notify_status_change(
     rebuild_tray_menu(app_handle);
     reset_title_timer(app_handle.clone());
     info!("Tray notify: {} {} {}", name, action, rid);
+
+    // ---- Sound playback ----
+    let event_type = match (was_live, is_live) {
+        (false, true) => "live",
+        (true, false) => "offline",
+        _ => return,
+    };
+    let streamer_name = name.to_string();
+    let handle = app_handle.clone();
+
+    if let Some(state) = handle.try_state::<Arc<AppState>>() {
+        let data_dir = state.data_dir.clone();
+        tauri::async_runtime::spawn(async move {
+            let config = {
+                if let Some(s) = handle.try_state::<Arc<AppState>>() {
+                    let store = s.store.lock().unwrap();
+                    store.get_all().config
+                } else {
+                    return;
+                }
+            };
+
+            if config.sound_enabled {
+                if let Err(e) = sound::play_random_for_streamer(
+                    &streamer_name,
+                    event_type,
+                    config.sound_volume,
+                    &data_dir,
+                ) {
+                    warn!("Sound playback failed: {}", e);
+                }
+            }
+        });
+    }
 }
 
 #[tauri::command]
@@ -461,6 +577,7 @@ async fn test_trigger_status(
 
     notify_status_change(
         &app_handle,
+        uid,
         &name,
         &prev_status,
         &new_status,
@@ -625,6 +742,11 @@ pub fn run() {
             test_trigger_status,
             set_autostart,
             set_show_window_on_startup,
+            download_streamer_sounds,
+            get_sound_info,
+            play_streamer_sound,
+            set_sound_enabled,
+            set_sound_volume,
         ])
         .run(ctx)
         .expect("error while running tauri application");

@@ -36,6 +36,8 @@ pub struct AppConfig {
     pub badge_timeout_mins: u64,
     pub autostart: bool,
     pub show_window_on_startup: bool,
+    pub sound_enabled: bool,
+    pub sound_volume: f32,
 }
 
 impl Default for AppConfig {
@@ -45,6 +47,8 @@ impl Default for AppConfig {
             badge_timeout_mins: 30,
             autostart: false,
             show_window_on_startup: true,
+            sound_enabled: true,
+            sound_volume: 0.8,
         }
     }
 }
@@ -57,6 +61,15 @@ pub struct SubscriptionStatus {
     pub title: Option<String>,
     pub room_id: Option<u64>,
     pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SoundInfo {
+    pub name: String,
+    pub available_live: u32,
+    pub available_offline: u32,
+    pub downloaded_live: u32,
+    pub downloaded_offline: u32,
 }
 
 /// Persisted state — managed by Store
@@ -97,5 +110,10 @@ impl AppState {
             .join(format!("{}.jpg", uid))
             .to_string_lossy()
             .to_string()
+    }
+
+    #[allow(dead_code)]
+    pub fn streamer_sounds_dir(&self, name: &str) -> PathBuf {
+        self.data_dir.join("sounds").join(name)
     }
 }

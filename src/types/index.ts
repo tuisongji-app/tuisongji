@@ -9,11 +9,21 @@ export interface SubscriptionStatus {
   avatar_url: string | null;
 }
 
+export interface SoundInfo {
+  name: string;
+  available_live: number;
+  available_offline: number;
+  downloaded_live: number;
+  downloaded_offline: number;
+}
+
 export interface AppConfig {
   poll_interval_mins: number;
   badge_timeout_mins: number;
   autostart: boolean;
   show_window_on_startup: boolean;
+  sound_enabled: boolean;
+  sound_volume: number;
 }
 
 export const statusLabels: Record<LiveStatus, string> = {
