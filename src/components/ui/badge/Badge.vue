@@ -1,34 +1,26 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils'
-import { cva, type VariantProps } from 'class-variance-authority'
+import type { PrimitiveProps } from "reka-ui"
+import type { HTMLAttributes } from "vue"
+import type { BadgeVariants } from "."
+import { reactiveOmit } from "@vueuse/core"
+import { Primitive } from "reka-ui"
+import { cn } from "@/lib/utils"
+import { badgeVariants } from "."
 
-const badgeVariants = cva(
-  'inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
-  {
-    variants: {
-      variant: {
-        default: 'border-transparent bg-primary text-primary-foreground shadow',
-        secondary: 'border-transparent bg-secondary text-secondary-foreground',
-        destructive: 'border-transparent bg-destructive text-destructive-foreground shadow',
-        outline: 'text-foreground',
-        success: 'border-transparent bg-green-500 text-white shadow',
-        warning: 'border-transparent bg-yellow-500 text-white shadow',
-      },
-    },
-    defaultVariants: {
-      variant: 'default',
-    },
-  },
-)
-
-const props = defineProps<{
-  variant?: VariantProps<typeof badgeVariants>['variant']
-  class?: string
+const props = defineProps<PrimitiveProps & {
+  variant?: BadgeVariants["variant"]
+  class?: HTMLAttributes["class"]
 }>()
+
+const delegatedProps = reactiveOmit(props, "class")
 </script>
 
 <template>
-  <span :class="cn(badgeVariants({ variant: props.variant }), props.class)">
+  <Primitive
+    data-slot="badge"
+    :class="cn(badgeVariants({ variant }), props.class)"
+    v-bind="delegatedProps"
+  >
     <slot />
-  </span>
+  </Primitive>
 </template>

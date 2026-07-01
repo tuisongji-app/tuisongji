@@ -1,29 +1,30 @@
 <script setup lang="ts">
-import { cn } from '@/lib/utils'
-import { Primitive, type PrimitiveProps } from 'radix-vue'
-import { buttonVariants, type ButtonVariants } from '.'
-import { computed } from 'vue'
+import type { PrimitiveProps } from "reka-ui"
+import type { HTMLAttributes } from "vue"
+import type { ButtonVariants } from "."
+import { Primitive } from "reka-ui"
+import { cn } from "@/lib/utils"
+import { buttonVariants } from "."
 
-interface ButtonProps extends PrimitiveProps {
-  variant?: ButtonVariants['variant']
-  size?: ButtonVariants['size']
-  class?: string
+interface Props extends PrimitiveProps {
+  variant?: ButtonVariants["variant"]
+  size?: ButtonVariants["size"]
+  class?: HTMLAttributes["class"]
 }
 
-const props = withDefaults(defineProps<ButtonProps>(), {
-  as: 'button',
-})
-
-const delegatedProps = computed(() => {
-  const { class: _, ...delegated } = props
-  return delegated
+const props = withDefaults(defineProps<Props>(), {
+  as: "button",
 })
 </script>
 
 <template>
   <Primitive
-    v-bind="delegatedProps"
-    :class="cn(buttonVariants({ variant: props.variant, size: props.size }), props.class)"
+    data-slot="button"
+    :data-variant="variant"
+    :data-size="size"
+    :as="as"
+    :as-child="asChild"
+    :class="cn(buttonVariants({ variant, size }), props.class)"
   >
     <slot />
   </Primitive>

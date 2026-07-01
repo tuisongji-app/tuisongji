@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { NumberField } from "@/components/ui/number-field";
+import { NumberField, NumberFieldContent, NumberFieldDecrement, NumberFieldIncrement, NumberFieldInput } from "@/components/ui/number-field";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
 import {
   updatePollInterval,
   updateBadgeTimeout,
@@ -43,7 +45,8 @@ function onBadgeTimeoutChange(val: number) {
   if (val >= 1) updateBadgeTimeout(val);
 }
 
-async function onAutostartChange(val: boolean) {
+async function onAutostartChange(val: boolean | "indeterminate") {
+  if (typeof val !== "boolean") return;
   autostart.value = val;
   if (val) {
     await enable();
@@ -53,20 +56,23 @@ async function onAutostartChange(val: boolean) {
   await setAutostart(val);
 }
 
-async function onShowWindowChange(val: boolean) {
+async function onShowWindowChange(val: boolean | "indeterminate") {
+  if (typeof val !== "boolean") return;
   showWindowOnStartup.value = val;
   await setShowWindowOnStartup(val);
 }
 
-async function onSoundEnabledChange(val: boolean) {
+async function onSoundEnabledChange(val: boolean | "indeterminate") {
+  if (typeof val !== "boolean") return;
   soundEnabled.value = val;
   await setSoundEnabled(val);
 }
 
-async function onVolumeChange(e: Event) {
-  const val = parseInt((e.target as HTMLInputElement).value, 10) / 100;
-  soundVolume.value = val;
-  await setSoundVolume(val);
+async function onVolumeChange(val: number[] | undefined) {
+  if (!val) return;
+  const v = val[0] / 100;
+  soundVolume.value = v;
+  await setSoundVolume(v);
 }
 </script>
 
@@ -86,15 +92,11 @@ async function onVolumeChange(e: Event) {
           <span class="text-sm">开机自启</span>
           <p class="text-xs text-muted-foreground mt-0.5">登录系统后自动启动应用</p>
         </div>
-        <label class="relative inline-flex items-center cursor-pointer shrink-0">
-          <input
-            type="checkbox"
-            class="sr-only peer"
-            :checked="autostart"
-            @change="onAutostartChange(($event.target as HTMLInputElement).checked)"
-          />
-          <div class="w-9 h-5 bg-input rounded-full peer peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-ring transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-4" />
-        </label>
+        <Checkbox
+          :model-value="autostart"
+          class="shrink-0"
+          @update:model-value="onAutostartChange"
+        />
       </div>
 
       <!-- 启动时显示窗口 -->
@@ -103,15 +105,11 @@ async function onVolumeChange(e: Event) {
           <span class="text-sm">启动时显示窗口</span>
           <p class="text-xs text-muted-foreground mt-0.5">应用启动时自动显示主窗口</p>
         </div>
-        <label class="relative inline-flex items-center cursor-pointer shrink-0">
-          <input
-            type="checkbox"
-            class="sr-only peer"
-            :checked="showWindowOnStartup"
-            @change="onShowWindowChange(($event.target as HTMLInputElement).checked)"
-          />
-          <div class="w-9 h-5 bg-input rounded-full peer peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-ring transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-4" />
-        </label>
+        <Checkbox
+          :model-value="showWindowOnStartup"
+          class="shrink-0"
+          @update:model-value="onShowWindowChange"
+        />
       </div>
 
       <!-- 轮询间隔 -->
@@ -126,7 +124,13 @@ async function onVolumeChange(e: Event) {
           class="w-32 shrink-0"
           :min="1"
           @update:model-value="onIntervalChange"
-        />
+        >
+          <NumberFieldContent>
+            <NumberFieldDecrement />
+            <NumberFieldInput />
+            <NumberFieldIncrement />
+          </NumberFieldContent>
+        </NumberField>
       </div>
 
       <!-- 通知隐藏时间 -->
@@ -141,7 +145,13 @@ async function onVolumeChange(e: Event) {
           class="w-32 shrink-0"
           :min="1"
           @update:model-value="onBadgeTimeoutChange"
-        />
+        >
+          <NumberFieldContent>
+            <NumberFieldDecrement />
+            <NumberFieldInput />
+            <NumberFieldIncrement />
+          </NumberFieldContent>
+        </NumberField>
       </div>
 
       <!-- 音效通知 -->
@@ -150,15 +160,11 @@ async function onVolumeChange(e: Event) {
           <span class="text-sm">音效通知</span>
           <p class="text-xs text-muted-foreground mt-0.5">开播/下播时播放提示音效</p>
         </div>
-        <label class="relative inline-flex items-center cursor-pointer shrink-0">
-          <input
-            type="checkbox"
-            class="sr-only peer"
-            :checked="soundEnabled"
-            @change="onSoundEnabledChange(($event.target as HTMLInputElement).checked)"
-          />
-          <div class="w-9 h-5 bg-input rounded-full peer peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-ring transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform peer-checked:after:translate-x-4" />
-        </label>
+        <Checkbox
+          :model-value="soundEnabled"
+          class="shrink-0"
+          @update:model-value="onSoundEnabledChange"
+        />
       </div>
 
       <!-- 音量 -->
@@ -167,40 +173,16 @@ async function onVolumeChange(e: Event) {
           <span class="text-sm">音效音量</span>
           <p class="text-xs text-muted-foreground mt-0.5">控制音效播放的音量大小</p>
         </div>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          :value="Math.round(soundVolume * 100)"
+        <Slider
+          :model-value="[Math.round(soundVolume * 100)]"
+          :min="0"
+          :max="100"
+          :step="1"
           :disabled="!soundEnabled"
-          @input="onVolumeChange"
-          class="w-32 h-2 bg-input rounded-lg appearance-none cursor-pointer shrink-0 sound-slider"
+          class="w-32 shrink-0"
+          @update:model-value="onVolumeChange"
         />
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.sound-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: hsl(var(--primary));
-  cursor: pointer;
-}
-.sound-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: none;
-  background: hsl(var(--primary));
-  cursor: pointer;
-}
-.sound-slider:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-</style>
