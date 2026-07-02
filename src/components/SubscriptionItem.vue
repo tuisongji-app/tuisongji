@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Trash2, ExternalLink, Volume2 } from "lucide-vue-next";
 import { statusLabels, statusVariants } from "@/types";
 import type { SubscriptionStatus, SoundInfo } from "@/types";
+import { toast } from "vue-sonner";
 import { getSoundInfo, downloadStreamerSounds, playStreamerSound } from "@/tauri";
 
 const props = defineProps<{
@@ -42,14 +43,16 @@ async function handleDownloadSounds() {
   try {
     soundState.value = await downloadStreamerSounds(props.subscription.name);
   } catch (e) {
-    console.error("Download sounds failed:", e);
+    toast.error("音效下载失败，请稍后重试");
   } finally {
     soundLoading.value = false;
   }
 }
 
 function handlePreviewSound(eventType: string) {
-  playStreamerSound(props.subscription.name, eventType).catch(console.error);
+  playStreamerSound(props.subscription.name, eventType).catch(() => {
+    toast.error("音效播放失败");
+  });
 }
 
 const hasUndownloaded = computed(() => {

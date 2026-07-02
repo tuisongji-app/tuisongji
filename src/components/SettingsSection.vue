@@ -18,6 +18,7 @@ import { enable, disable } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { getVersion } from "@tauri-apps/api/app";
 import { Button } from "@/components/ui/button";
+import { toast } from "vue-sonner";
 import { Settings, RefreshCw } from "lucide-vue-next";
 
 const interval = ref(30);
@@ -104,7 +105,7 @@ async function handleCheckUpdate() {
       updateBody.value = update.body ?? "";
     }
   } catch (e) {
-    console.error("Check update failed:", e);
+    toast.error("检查更新失败，请稍后重试");
   } finally {
     updateChecking.value = false;
   }
@@ -119,7 +120,7 @@ async function handleDownloadAndInstall() {
       installed.value = true;
     }
   } catch (e) {
-    console.error("Download/install failed:", e);
+    toast.error("下载或安装更新失败，请稍后重试");
   } finally {
     downloading.value = false;
   }
