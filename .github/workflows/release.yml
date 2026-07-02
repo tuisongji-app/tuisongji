@@ -77,6 +77,4 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseBody: release ${{ github.ref_name }}
-          releaseDraft: true
-          prerelease: false
           assetNamePattern: tuisongji_[version]_[arch].[ext]
