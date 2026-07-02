@@ -17,9 +17,10 @@ import {
 import { enable, disable } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Button } from "@/components/ui/button";
 import { toast } from "vue-sonner";
-import { Settings, RefreshCw } from "lucide-vue-next";
+import { Settings, RefreshCw, ExternalLink, Info } from "lucide-vue-next";
 
 const interval = ref(30);
 const badgeTimeout = ref(30);
@@ -103,6 +104,8 @@ async function handleCheckUpdate() {
     if (update) {
       updateVersion.value = update.version;
       updateBody.value = update.body ?? "";
+    } else {
+      toast.success("已是最新版本");
     }
   } catch (e) {
     toast.error("检查更新失败，请稍后重试");
@@ -239,69 +242,92 @@ async function handleRestart() {
         />
       </div>
 
-      <Separator class="my-4" />
+    </div>
+  </div>
 
+  <Separator class="my-6" />
+
+  <!-- 关于 -->
+  <div>
+    <div class="flex items-center gap-2 mb-4">
+      <Info class="w-4 h-4 text-muted-foreground" />
+      <h2 class="text-sm font-semibold text-muted-foreground">关于</h2>
+    </div>
+
+    <div class="space-y-3">
       <!-- 版本更新 -->
-      <div class="space-y-3">
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="text-sm">版本更新</span>
+      <div class="flex items-center justify-between">
+        <div>
+          <template v-if="installed">
+            <span class="text-sm text-green-600 font-medium">更新已安装，重启后生效</span>
+          </template>
+          <template v-else>
+            <span class="text-sm">{{ updateVersion ? '更新版本' : '当前版本' }}</span>
             <p class="text-xs text-muted-foreground mt-0.5">
-              当前版本 v{{ appVersion }}
+              v{{ updateVersion || appVersion }}
             </p>
-          </div>
-          <Button
-            v-if="!installed && !updateVersion"
-            variant="outline"
-            size="sm"
-            class="h-8 text-xs shrink-0"
-            :disabled="updateChecking"
-            @click="handleCheckUpdate"
-          >
-            <RefreshCw
-              :class="['w-3.5 h-3.5 mr-1', updateChecking && 'animate-spin']"
-            />
-            {{ updateChecking ? '检查中...' : '检查更新' }}
-          </Button>
+          </template>
         </div>
-
-        <div
-          v-if="updateVersion && !installed"
-          class="text-xs text-muted-foreground space-y-1"
-        >
-          <p>
-            新版本 <span class="font-medium text-foreground">v{{ updateVersion }}</span>
-          </p>
-          <p v-if="updateBody" class="whitespace-pre-wrap">{{ updateBody }}</p>
-        </div>
-
-        <div v-if="updateVersion && !installed" class="flex gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            class="h-8 text-xs"
-            :disabled="downloading"
-            @click="handleDownloadAndInstall"
-          >
-            {{ downloading ? '下载中...' : '下载并安装' }}
-          </Button>
-        </div>
-
-        <div
-          v-if="installed"
-          class="text-xs text-muted-foreground"
-        >
-          <p class="text-green-600 font-medium">更新已安装，重启后生效</p>
-        </div>
-
         <Button
           v-if="installed"
           variant="default"
           size="sm"
-          class="h-8 text-xs"
+          class="h-8 text-xs shrink-0"
           @click="handleRestart"
         >
           立即重启
+        </Button>
+        <Button
+          v-else-if="updateVersion"
+          variant="default"
+          size="sm"
+          class="h-8 text-xs shrink-0"
+          :disabled="downloading"
+          @click="handleDownloadAndInstall"
+        >
+          {{ downloading ? '下载中...' : '下载' }}
+        </Button>
+        <Button
+          v-else
+          variant="outline"
+          size="sm"
+          class="h-8 text-xs shrink-0"
+          :disabled="updateChecking"
+          @click="handleCheckUpdate"
+        >
+          <RefreshCw
+            :class="['w-3.5 h-3.5 mr-1', updateChecking && 'animate-spin']"
+          />
+          {{ updateChecking ? '检查中...' : '检查更新' }}
+        </Button>
+      </div>
+
+      <!-- 项目链接 -->
+      <div class="flex items-center justify-between">
+        <span class="text-sm">项目仓库</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8 shrink-0"
+          @click="openUrl('https://github.com/tuisongji-app/tuisongji')"
+        >
+          <ExternalLink class="w-4 h-4" />
+        </Button>
+      </div>
+
+      <!-- 音效仓库 -->
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-sm">音效仓库</span>
+          <p class="text-xs text-muted-foreground mt-0.5">投稿更多音效</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8 shrink-0"
+          @click="openUrl('https://github.com/tuisongji-app/sound')"
+        >
+          <ExternalLink class="w-4 h-4" />
         </Button>
       </div>
     </div>
