@@ -8,10 +8,10 @@ mod updater;
 use log::{info, warn};
 use state::{AppState, LiveStatus, Subscription, SubscriptionStatus};
 use std::sync::Mutex;
+use tauri::{Context, Manager, Runtime, is_dev};
 use std::sync::Arc;
 use store::figment::value::Value;
 use tauri::Emitter;
-use tauri::Manager;
 use tauri_plugin_autostart::AutoLaunchManager;
 use tauri_plugin_opener::OpenerExt;
 
@@ -627,9 +627,21 @@ async fn set_show_window_on_startup(
 
 // ---- App Entry Point ----
 
+fn get_context<R: Runtime>() -> Context<R> {
+    let mut context = tauri::generate_context!();
+    if is_dev() {
+        let config = context.config_mut();
+        config.identifier += ".dev";
+        if let Some(name) = &config.product_name {
+            config.product_name = Some(name.to_owned() + ".dev");
+        }
+    }
+    context
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let ctx = tauri::generate_context!();
+    let ctx = get_context();
     let identifier = ctx.config().identifier.clone();
 
     tauri::Builder::default()
