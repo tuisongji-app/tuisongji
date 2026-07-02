@@ -17,9 +17,11 @@ jobs:
         include:
           - args: '--target aarch64-apple-darwin'
             arch: 'silicon'
+            platform: macos-latest
           - args: '--target x86_64-apple-darwin'
             arch: 'intel'
-    runs-on: macos-latest
+            platform: macos-latest
+    runs-on: ${{ matrix.platform }}
     env:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -32,6 +34,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
@@ -74,4 +78,4 @@ jobs:
           releaseBody: release ${{ github.ref_name }}
           releaseDraft: true
           prerelease: false
-          releaseAssetNamePattern: tuisongji_[version]_[arch].[ext]
+          assetNamePattern: tuisongji_[version]_[arch].[ext]
