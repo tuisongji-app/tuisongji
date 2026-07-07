@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import SubscriptionItem from "./SubscriptionItem.vue";
 import type { SubscriptionStatus } from "@/types";
 
@@ -9,6 +10,8 @@ defineProps<{
 const emit = defineEmits<{
   (e: "removed", uid: number, subType: string): void;
 }>();
+
+const leaving = ref(0);
 </script>
 
 <template>
@@ -16,14 +19,19 @@ const emit = defineEmits<{
     <h2 class="text-sm font-semibold text-muted-foreground mb-3">订阅列表</h2>
 
     <div
-      v-if="subscriptions.length === 0"
+      v-if="subscriptions.length === 0 && leaving === 0"
       class="text-center py-8 text-muted-foreground"
     >
       <p>还没有订阅任何主播</p>
       <p class="text-xs mt-1">在上方选择平台并输入ID来添加订阅</p>
     </div>
 
-    <TransitionGroup name="list" tag="div">
+    <TransitionGroup
+      name="list"
+      tag="div"
+      @before-leave="leaving++"
+      @after-leave="leaving--"
+    >
       <SubscriptionItem
         v-for="sub in subscriptions"
         :key="`${sub.sub_type}:${sub.uid}`"
