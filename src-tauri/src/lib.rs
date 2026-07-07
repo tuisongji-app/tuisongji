@@ -104,40 +104,62 @@ fn show_window(app_handle: &tauri::AppHandle) {
     }
 }
 
+fn platform_display_name(sub_type: &str) -> &str {
+    match sub_type {
+        "huya" => "虎牙",
+        _ => "bilibili",
+    }
+}
+
 fn rebuild_tray_menu(app_handle: &tauri::AppHandle) {
     let notifs = NOTIFS.lock().unwrap();
     let mut menu = tauri::menu::MenuBuilder::new(app_handle);
 
-    // Group header + notification items
-    if !notifs.is_empty() {
-        let header_label = &notifs[0].sub_type;
-        let header = tauri::menu::MenuItemBuilder::with_id("platform_header", header_label)
-            .enabled(false)
-            .build(app_handle)
-            .unwrap();
-        menu = menu.item(&header);
-    }
+    // 按平台分组：收集不同平台的顺序
+    let mut seen_platforms: Vec<&str> = vec![];
     for item in notifs.iter() {
-        let label = format!("{} {}", item.name, item.action);
-        let id = format!("notif:{}", item.room_id);
+        if !seen_platforms.contains(&item.sub_type.as_str()) {
+            seen_platforms.push(&item.sub_type);
+        }
+    }
 
-        // Try to use IconMenuItemBuilder with avatar
-        let mi: Box<dyn tauri::menu::IsMenuItem<tauri::Wry>> =
-            if let Some(ref path) = item.avatar_path {
-                if let Some(icon) = load_avatar_icon(path) {
-                    match tauri::menu::IconMenuItemBuilder::with_id(
-                        id.clone(),
-                        label.clone(),
-                    )
-                    .icon(icon)
-                    .build(app_handle)
-                    {
-                        Ok(icon_mi) => Box::new(icon_mi),
-                        Err(_) => Box::new(
+    for platform in &seen_platforms {
+        let header = tauri::menu::MenuItemBuilder::with_id(
+            format!("header_{}", platform),
+            platform_display_name(platform),
+        )
+        .enabled(false)
+        .build(app_handle)
+        .unwrap();
+        menu = menu.item(&header);
+
+        for item in notifs.iter().filter(|n| n.sub_type == *platform) {
+            let label = format!("{} {}", item.name, item.action);
+            let id = format!("notif:{}", item.room_id);
+
+            let mi: Box<dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+                if let Some(ref path) = item.avatar_path {
+                    if let Some(icon) = load_avatar_icon(path) {
+                        match tauri::menu::IconMenuItemBuilder::with_id(
+                            id.clone(),
+                            label.clone(),
+                        )
+                        .icon(icon)
+                        .build(app_handle)
+                        {
+                            Ok(icon_mi) => Box::new(icon_mi),
+                            Err(_) => Box::new(
+                                tauri::menu::MenuItemBuilder::with_id(id, label)
+                                    .build(app_handle)
+                                    .unwrap(),
+                            ),
+                        }
+                    } else {
+                        Box::new(
                             tauri::menu::MenuItemBuilder::with_id(id, label)
                                 .build(app_handle)
                                 .unwrap(),
-                        ),
+                        )
                     }
                 } else {
                     Box::new(
@@ -145,15 +167,9 @@ fn rebuild_tray_menu(app_handle: &tauri::AppHandle) {
                             .build(app_handle)
                             .unwrap(),
                     )
-                }
-            } else {
-                Box::new(
-                    tauri::menu::MenuItemBuilder::with_id(id, label)
-                        .build(app_handle)
-                        .unwrap(),
-                )
-            };
-        menu = menu.item(&*mi);
+                };
+            menu = menu.item(&*mi);
+        }
     }
 
     // Separator + clear all
