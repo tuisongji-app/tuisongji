@@ -8,7 +8,7 @@ import SubscriptionForm from "./components/SubscriptionForm.vue";
 import SubscriptionList from "./components/SubscriptionList.vue";
 import SettingsSection from "./components/SettingsSection.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
-// import TestPanel from "./components/TestPanel.vue";
+import TestPanel from "./components/TestPanel.vue";
 import { listSubscriptions, removeSubscription, getConfig } from "@/tauri";
 import type { SubscriptionStatus } from "./types";
 
@@ -99,7 +99,7 @@ async function onSubscriptionRemoved(uid: number, subType: string) {
         :auto-update-version="updateVersion"
         :auto-update-body="updateBody"
       />
-      <!-- <TestPanel :subscriptions="subscriptions" /> -->
+      <TestPanel :subscriptions="subscriptions" />
 
       <UpdateDialog
         :open="showUpdateDialog"
