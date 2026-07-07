@@ -1,22 +1,54 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-vue-next";
 import SubscriptionItem from "./SubscriptionItem.vue";
+import { refreshStatus } from "@/tauri";
 import type { SubscriptionStatus } from "@/types";
 
-defineProps<{
+const props = defineProps<{
   subscriptions: SubscriptionStatus[];
 }>();
 
 const emit = defineEmits<{
   (e: "removed", uid: number, subType: string): void;
+  (e: "update:subscriptions", subs: SubscriptionStatus[]): void;
 }>();
 
 const leaving = ref(0);
+const refreshing = ref(false);
+
+async function handleRefresh() {
+  refreshing.value = true;
+  const minDuration = new Promise((r) => setTimeout(r, 300));
+  const results = await Promise.allSettled(
+    props.subscriptions.map((sub) => refreshStatus(sub.uid, sub.sub_type))
+  );
+  const updated = props.subscriptions.map((sub, i) => {
+    if (results[i].status === "fulfilled") return results[i].value;
+    return sub;
+  });
+  await minDuration;
+  refreshing.value = false;
+  emit("update:subscriptions", updated);
+}
 </script>
 
 <template>
   <div class="mb-6">
-    <h2 class="text-sm font-semibold text-muted-foreground mb-3">订阅列表</h2>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold text-muted-foreground">订阅列表</h2>
+      <Button
+        v-if="subscriptions.length > 0"
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        :disabled="refreshing"
+        @click="handleRefresh"
+      >
+        <RefreshCw :class="['w-3.5 h-3.5', refreshing && 'animate-spin']" />
+      </Button>
+    </div>
 
     <div
       v-if="subscriptions.length === 0 && leaving === 0"

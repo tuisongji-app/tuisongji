@@ -91,6 +91,7 @@ async function onSubscriptionRemoved(uid: number, subType: string) {
         v-else
         :subscriptions="subscriptions"
         @removed="onSubscriptionRemoved"
+        @update:subscriptions="(subs) => subscriptions = subs"
       />
 
       <SettingsSection
