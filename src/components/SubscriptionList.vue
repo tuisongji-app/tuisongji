@@ -7,7 +7,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "removed", uid: number): void;
+  (e: "removed", uid: number, subType: string): void;
 }>();
 </script>
 
@@ -19,16 +19,16 @@ const emit = defineEmits<{
       v-if="subscriptions.length === 0"
       class="text-center py-8 text-muted-foreground"
     >
-      <p>还没有订阅任何UP主</p>
-      <p class="text-xs mt-1">在上方输入B站UID来添加订阅</p>
+      <p>还没有订阅任何主播</p>
+      <p class="text-xs mt-1">在上方选择平台并输入ID来添加订阅</p>
     </div>
 
     <TransitionGroup name="list" tag="div">
       <SubscriptionItem
         v-for="sub in subscriptions"
-        :key="sub.uid"
+        :key="`${sub.sub_type}:${sub.uid}`"
         :subscription="sub"
-        @remove="emit('removed', $event)"
+        @remove="(uid: number, subType: string) => emit('removed', uid, subType)"
       />
     </TransitionGroup>
   </div>

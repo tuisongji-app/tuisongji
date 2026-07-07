@@ -3,20 +3,20 @@ import type { SubscriptionStatus, AppConfig, SoundInfo } from "@/types";
 
 // ---- Subscriptions ----
 
-export function addSubscription(uid: number): Promise<SubscriptionStatus> {
-  return invoke("add_subscription", { uid });
+export function addSubscription(uid: number, subType: string, inputMode: string): Promise<SubscriptionStatus> {
+  return invoke("add_subscription", { uid, subType, inputMode });
 }
 
-export function removeSubscription(uid: number): Promise<void> {
-  return invoke("remove_subscription", { uid });
+export function removeSubscription(uid: number, subType: string): Promise<void> {
+  return invoke("remove_subscription", { uid, subType });
 }
 
 export function listSubscriptions(): Promise<SubscriptionStatus[]> {
   return invoke("list_subscriptions");
 }
 
-export function refreshStatus(uid: number): Promise<SubscriptionStatus> {
-  return invoke("refresh_status", { uid });
+export function refreshStatus(uid: number, subType: string): Promise<SubscriptionStatus> {
+  return invoke("refresh_status", { uid, subType });
 }
 
 // ---- Poll / badge config ----
@@ -47,9 +47,10 @@ export function setShowWindowOnStartup(enabled: boolean): Promise<void> {
 
 export function testTriggerStatus(
   uid: number,
+  subType: string,
   targetStatus: string,
 ): Promise<void> {
-  return invoke("test_trigger_status", { uid, targetStatus });
+  return invoke("test_trigger_status", { uid, subType, targetStatus });
 }
 
 // ---- Sound effects ----

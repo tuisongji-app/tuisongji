@@ -1,7 +1,27 @@
 export type LiveStatus = "offline" | "live" | "replay";
 
+export type SubType = "bilibili" | "huya";
+
+export type InputMode = "uid" | "room";
+
+export const inputModeLabels: Record<InputMode, string> = {
+  uid: "UID",
+  room: "房间号",
+};
+
+export const subTypeLabels: Record<SubType, string> = {
+  bilibili: "B站",
+  huya: "虎牙",
+};
+
+export const subTypePlaceholders: Record<SubType, string> = {
+  bilibili: "输入B站UP主的UID...",
+  huya: "输入虎牙用户UID...",
+};
+
 export interface SubscriptionStatus {
   uid: number;
+  sub_type: string;
   name: string;
   status: LiveStatus;
   title: string | null;

@@ -20,15 +20,6 @@ pub enum LiveStatus {
     Replay,
 }
 
-impl LiveStatus {
-    pub fn from_i64(v: i64) -> Self {
-        match v {
-            1 => LiveStatus::Live,
-            2 => LiveStatus::Replay,
-            _ => LiveStatus::Offline,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -56,6 +47,7 @@ impl Default for AppConfig {
 #[derive(Debug, Clone, Serialize)]
 pub struct SubscriptionStatus {
     pub uid: u64,
+    pub sub_type: String,
     pub name: String,
     pub status: LiveStatus,
     pub title: Option<String>,
@@ -81,7 +73,7 @@ pub struct PersistData {
 
 pub struct AppState {
     pub store: Mutex<Store<PersistData>>,
-    pub status_cache: Mutex<HashMap<u64, LiveStatus>>,
+    pub status_cache: Mutex<HashMap<(String, u64), LiveStatus>>,
     pub data_dir: PathBuf,
 }
 

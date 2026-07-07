@@ -17,8 +17,8 @@ const statusActions = [
   { key: "replay", label: "轮播", variant: "secondary" as const },
 ];
 
-function trigger(uid: number, target: string) {
-  testTriggerStatus(uid, target).catch(console.error);
+function trigger(uid: number, subType: string, target: string) {
+  testTriggerStatus(uid, subType, target).catch(console.error);
 }
 </script>
 
@@ -36,7 +36,7 @@ function trigger(uid: number, target: string) {
       <div v-if="subscriptions.length === 0" class="text-sm text-muted-foreground">
         暂无订阅，先添加一个再测试
       </div>
-      <div v-for="sub in subscriptions" :key="sub.uid" class="mb-3 last:mb-0">
+      <div v-for="sub in subscriptions" :key="`${sub.sub_type}:${sub.uid}`" class="mb-3 last:mb-0">
         <div class="text-sm font-medium mb-1.5">
           {{ sub.name }}
           <span class="text-xs text-muted-foreground">(当前: {{ statusLabels[sub.status] }})</span>
@@ -47,7 +47,7 @@ function trigger(uid: number, target: string) {
             :key="action.key"
             :variant="action.variant"
             size="sm"
-            @click="trigger(sub.uid, action.key)"
+            @click="trigger(sub.uid, sub.sub_type, action.key)"
           >
             模拟 {{ action.label }}
           </Button>

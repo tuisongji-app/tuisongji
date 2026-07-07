@@ -1,10 +1,11 @@
-mod bilibili_api;
+mod api;
 mod github_sounds;
 mod poller;
 mod sound;
 mod state;
 mod updater;
 
+use api::PlatformApi;
 use log::{info, warn};
 use state::{AppState, LiveStatus, Subscription, SubscriptionStatus};
 use std::sync::Mutex;
@@ -22,6 +23,7 @@ struct NotifItem {
     name: String,
     action: String,
     avatar_path: Option<String>,
+    sub_type: String,
 }
 
 static NOTIFS: Mutex<Vec<NotifItem>> = Mutex::new(Vec::new());
@@ -108,7 +110,8 @@ fn rebuild_tray_menu(app_handle: &tauri::AppHandle) {
 
     // Group header + notification items
     if !notifs.is_empty() {
-        let header = tauri::menu::MenuItemBuilder::with_id("bili_header", "bilibili")
+        let header_label = &notifs[0].sub_type;
+        let header = tauri::menu::MenuItemBuilder::with_id("platform_header", header_label)
             .enabled(false)
             .build(app_handle)
             .unwrap();
@@ -187,37 +190,53 @@ fn rebuild_tray_menu(app_handle: &tauri::AppHandle) {
 #[tauri::command]
 async fn add_subscription(
     uid: u64,
+    sub_type: String,
+    input_mode: String,
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<SubscriptionStatus, String> {
+    let (resolved_uid, name, remote_avatar_url, room_id) = match sub_type.as_str() {
+        "bilibili" if input_mode == "room" => api::bilibili::BilibiliApi::get_master_info_by_room(uid).await?,
+        "bilibili" => api::bilibili::BilibiliApi::get_master_info(uid).await?,
+        "huya" if input_mode == "room" => api::huya::HuyaApi::get_master_info_by_room(uid).await?,
+        "huya" => api::huya::HuyaApi::get_master_info(uid).await?,
+        _ => return Err(format!("不支持的平台: {}", sub_type)),
+    };
+
     {
         let store = state.store.lock().unwrap();
         let data = store.get_all();
-        if data.subscriptions.iter().any(|s| s.uid == uid) {
-            return Err("该UID已添加".to_string());
+        if data.subscriptions.iter().any(|s| s.uid == resolved_uid && s.r#type == sub_type) {
+            return Err("该ID已添加".to_string());
         }
     }
 
-    let (name, remote_avatar_url, room_id) = bilibili_api::get_master_info(uid).await?;
-
     let data_dir = state.data_dir.clone();
     if let Some(ref url) = remote_avatar_url {
-        if let Err(e) = bilibili_api::download_avatar(url, uid, "bilibili", &data_dir).await {
+        if let Err(e) = api::download_avatar(url, resolved_uid, &sub_type, &data_dir).await {
             warn!("Avatar download failed: {}", e);
         }
     }
 
-    let room_info = bilibili_api::get_room_info(room_id).await?;
-    let status = LiveStatus::from_i64(room_info.live_status);
+    let (live_status_code, title) = match sub_type.as_str() {
+        "bilibili" => api::bilibili::BilibiliApi::get_room_info(room_id).await?,
+        "huya" => api::huya::HuyaApi::get_room_info(room_id).await?,
+        _ => return Err(format!("不支持的平台: {}", sub_type)),
+    };
+    let status = match sub_type.as_str() {
+        "bilibili" => api::bilibili::BilibiliApi::map_live_status(live_status_code),
+        "huya" => api::huya::HuyaApi::map_live_status(live_status_code),
+        _ => return Err(format!("不支持的平台: {}", sub_type)),
+    };
 
     {
         let mut store = state.store.lock().unwrap();
         let mut data = store.get_all();
         data.subscriptions.push(Subscription {
-            uid,
+            uid: resolved_uid,
             name: Some(name.clone()),
             room_id: Some(room_id),
-            r#type: "bilibili".into(),
+            r#type: sub_type.clone(),
         });
         let value =
             Value::serialize(&data.subscriptions).map_err(|e| format!("Serialize: {}", e))?;
@@ -228,16 +247,17 @@ async fn add_subscription(
 
     {
         let mut cache = state.status_cache.lock().unwrap();
-        cache.insert(uid, status.clone());
+        cache.insert((sub_type.clone(), resolved_uid), status.clone());
     }
 
     let result = SubscriptionStatus {
-        uid,
+        uid: resolved_uid,
+        sub_type: sub_type.clone(),
         name,
         status,
-        title: Some(room_info.title),
+        title: Some(title),
         room_id: Some(room_id),
-        avatar_url: Some(state.avatar_full_path("bilibili", uid)),
+        avatar_url: Some(state.avatar_full_path(&sub_type, resolved_uid)),
     };
 
     let _ = app_handle.emit("status-changed", &result);
@@ -247,12 +267,13 @@ async fn add_subscription(
 #[tauri::command]
 async fn remove_subscription(
     uid: u64,
+    sub_type: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
     {
         let mut store = state.store.lock().unwrap();
         let mut data = store.get_all();
-        data.subscriptions.retain(|s| s.uid != uid);
+        data.subscriptions.retain(|s| !(s.uid == uid && s.r#type == sub_type));
         let value =
             Value::serialize(&data.subscriptions).map_err(|e| format!("Serialize: {}", e))?;
         store
@@ -261,7 +282,7 @@ async fn remove_subscription(
     }
     {
         let mut cache = state.status_cache.lock().unwrap();
-        cache.remove(&uid);
+        cache.remove(&(sub_type, uid));
     }
     Ok(())
 }
@@ -280,14 +301,16 @@ async fn list_subscriptions(
     let result = subs
         .into_iter()
         .map(|s| {
-            let status = cache.get(&s.uid).cloned().unwrap_or(LiveStatus::Offline);
+            let cache_key = (s.r#type.clone(), s.uid);
+            let status = cache.get(&cache_key).cloned().unwrap_or(LiveStatus::Offline);
             SubscriptionStatus {
                 uid: s.uid,
+                sub_type: s.r#type.clone(),
                 name: s.name.unwrap_or_else(|| "未知".to_string()),
                 status,
                 title: None,
                 room_id: s.room_id,
-                avatar_url: Some(state.avatar_full_path("bilibili", s.uid)),
+                avatar_url: Some(state.avatar_full_path(&s.r#type, s.uid)),
             }
         })
         .collect();
@@ -298,43 +321,44 @@ async fn list_subscriptions(
 #[tauri::command]
 async fn refresh_status(
     uid: u64,
+    sub_type: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<SubscriptionStatus, String> {
-    let room_id = {
+    let (room_id, sub_name) = {
         let store = state.store.lock().unwrap();
         let data = store.get_all();
-        data.subscriptions
+        let sub = data
+            .subscriptions
             .iter()
-            .find(|s| s.uid == uid)
-            .and_then(|s| s.room_id)
-            .ok_or("未找到该订阅".to_string())?
+            .find(|s| s.uid == uid && s.r#type == sub_type)
+            .ok_or("未找到该订阅".to_string())?;
+        (sub.room_id.ok_or("该订阅缺少房间ID".to_string())?, sub.name.clone())
     };
 
-    let room_info = bilibili_api::get_room_info(room_id).await?;
-    let status = LiveStatus::from_i64(room_info.live_status);
+    let (live_status_code, title) = match sub_type.as_str() {
+        "bilibili" => api::bilibili::BilibiliApi::get_room_info(room_id).await?,
+        "huya" => api::huya::HuyaApi::get_room_info(room_id).await?,
+        _ => return Err(format!("不支持的平台: {}", sub_type)),
+    };
+    let status = match sub_type.as_str() {
+        "bilibili" => api::bilibili::BilibiliApi::map_live_status(live_status_code),
+        "huya" => api::huya::HuyaApi::map_live_status(live_status_code),
+        _ => return Err(format!("不支持的平台: {}", sub_type)),
+    };
 
     {
         let mut cache = state.status_cache.lock().unwrap();
-        cache.insert(uid, status.clone());
+        cache.insert((sub_type.clone(), uid), status.clone());
     }
-
-    let sub_name = {
-        let store = state.store.lock().unwrap();
-        let data = store.get_all();
-        data.subscriptions
-            .iter()
-            .find(|s| s.uid == uid)
-            .and_then(|s| s.name.clone())
-            .unwrap_or_else(|| "未知".to_string())
-    };
 
     Ok(SubscriptionStatus {
         uid,
-        name: sub_name,
+        sub_type: sub_type.clone(),
+        name: sub_name.unwrap_or_else(|| "未知".to_string()),
         status,
-        title: Some(room_info.title),
+        title: Some(title),
         room_id: Some(room_id),
-        avatar_url: Some(state.avatar_full_path("bilibili", uid)),
+        avatar_url: Some(state.avatar_full_path(&sub_type, uid)),
     })
 }
 
@@ -458,6 +482,7 @@ async fn set_sound_volume(
 pub fn notify_status_change(
     app_handle: &tauri::AppHandle,
     _uid: u64,
+    sub_type: &str,
     name: &str,
     prev_status: &LiveStatus,
     new_status: &LiveStatus,
@@ -490,6 +515,7 @@ pub fn notify_status_change(
                 name: name.to_string(),
                 action: action.to_string(),
                 avatar_path: avatar_path.map(|s| s.to_string()),
+                sub_type: sub_type.to_string(),
             },
         );
     }
@@ -536,6 +562,7 @@ pub fn notify_status_change(
 #[tauri::command]
 async fn test_trigger_status(
     uid: u64,
+    sub_type: String,
     target_status: String,
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
@@ -549,21 +576,19 @@ async fn test_trigger_status(
 
     let prev_status = {
         let mut cache = state.status_cache.lock().unwrap();
-        cache.insert(uid, new_status.clone()).unwrap_or(LiveStatus::Offline)
+        cache.insert((sub_type.clone(), uid), new_status.clone()).unwrap_or(LiveStatus::Offline)
     };
 
-    let (name, room_id) = {
+    let name = {
         let store = state.store.lock().unwrap();
         let data = store.get_all();
-        let sub = data.subscriptions.iter().find(|s| s.uid == uid).ok_or("订阅不存在")?;
-        (
-            sub.name.clone().unwrap_or_else(|| "未知".to_string()),
-            sub.room_id,
-        )
+        let sub = data.subscriptions.iter().find(|s| s.uid == uid && s.r#type == sub_type).ok_or("订阅不存在")?;
+        sub.name.clone().unwrap_or_else(|| "未知".to_string())
     };
 
     let status_update = SubscriptionStatus {
         uid,
+        sub_type: sub_type.clone(),
         name: name.clone(),
         status: new_status.clone(),
         title: if new_status == LiveStatus::Live {
@@ -571,19 +596,20 @@ async fn test_trigger_status(
         } else {
             None
         },
-        room_id,
-        avatar_url: Some(state.avatar_full_path("bilibili", uid)),
+        room_id: None,
+        avatar_url: Some(state.avatar_full_path(&sub_type, uid)),
     };
     let _ = app_handle.emit("status-changed", &status_update);
 
     notify_status_change(
         &app_handle,
         uid,
+        &sub_type,
         &name,
         &prev_status,
         &new_status,
-        room_id,
-        Some(&state.avatar_full_path("bilibili", uid)),
+        None,
+        Some(&state.avatar_full_path(&sub_type, uid)),
     );
 
     Ok(())
@@ -718,7 +744,16 @@ pub fn run() {
                             let rid_str = id.strip_prefix("notif:").unwrap_or("0");
                             let rid: u64 = rid_str.parse().unwrap_or(0);
                             if rid != 0 {
-                                let url = format!("https://live.bilibili.com/{}", rid);
+                                let notifs = NOTIFS.lock().unwrap();
+                                let url = if let Some(n) = notifs.iter().find(|n| n.room_id == rid) {
+                                    match n.sub_type.as_str() {
+                                        "huya" => api::huya::HuyaApi::room_url(rid),
+                                        _ => api::bilibili::BilibiliApi::room_url(rid),
+                                    }
+                                } else {
+                                    api::bilibili::BilibiliApi::room_url(rid)
+                                };
+                                drop(notifs);
                                 let _ = app_handle.opener().open_url(&url, None::<&str>);
                             }
                             {

@@ -16,7 +16,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: "remove", uid: number): void;
+  (e: "remove", uid: number, subType: string): void;
 }>();
 
 const avatarSrc = computed(() => {
@@ -65,7 +65,11 @@ const hasUndownloaded = computed(() => {
 
 function openRoom() {
   if (props.subscription.room_id) {
-    openUrl(`https://live.bilibili.com/${props.subscription.room_id}`);
+    const subType = props.subscription.sub_type || "bilibili";
+    const url = subType === "huya"
+      ? `https://www.huya.com/${props.subscription.room_id}`
+      : `https://live.bilibili.com/${props.subscription.room_id}`;
+    openUrl(url);
   }
 }
 </script>
@@ -104,7 +108,7 @@ function openRoom() {
             variant="ghost"
             size="icon"
             class="h-8 w-8 text-destructive hover:text-destructive"
-            @click="emit('remove', subscription.uid)"
+            @click="emit('remove', subscription.uid, subscription.sub_type)"
           >
             <Trash2 class="w-4 h-4" />
           </Button>

@@ -1,4 +1,5 @@
-use crate::bilibili_api;
+use crate::api;
+use crate::api::PlatformApi;
 use crate::state::{AppState, LiveStatus, Subscription};
 use log::{error, warn};
 use std::sync::Arc;
@@ -24,15 +25,26 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                 let room_id = match sub.room_id {
                     Some(rid) => rid,
                     None => {
-                        match bilibili_api::get_master_info(sub.uid).await {
-                            Ok((name, remote_avatar, rid)) => {
+                        let resolve_result = match sub.r#type.as_str() {
+                            "bilibili" => api::bilibili::BilibiliApi::get_master_info(sub.uid).await,
+                            "huya" => api::huya::HuyaApi::get_master_info(sub.uid).await,
+                            _ => {
+                                error!("未知平台类型: {}", sub.r#type);
+                                continue;
+                            }
+                        };
+
+                        match resolve_result {
+                            Ok((resolved_uid, name, remote_avatar, rid)) => {
                                 // Persist resolved info
+                                let resolved_id = resolved_uid;
                                 {
                                     let mut store = state.store.lock().unwrap();
                                     let mut data = store.get_all();
-                                    if let Some(s) =
-                                        data.subscriptions.iter_mut().find(|s| s.uid == sub.uid)
-                                    {
+                                    if let Some(s) = data.subscriptions.iter_mut().find(|s| {
+                                        s.uid == sub.uid && s.r#type == sub.r#type
+                                    }) {
+                                        s.uid = resolved_id;
                                         s.name = Some(name);
                                         s.room_id = Some(rid);
                                     }
@@ -43,22 +55,35 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                 // Download avatar (lock dropped, safe to await)
                                 if let Some(ref url) = remote_avatar {
                                     let data_dir = state.data_dir.clone();
-                                    let _ =
-                                        bilibili_api::download_avatar(url, sub.uid, "bilibili", &data_dir).await;
+                                    let sub_type = sub.r#type.clone();
+                                    let _ = api::download_avatar(url, resolved_id, &sub_type, &data_dir).await;
                                 }
                                 rid
                             }
                             Err(e) => {
-                                error!("Poll resolve error for uid {}: {}", sub.uid, e);
+                                error!("Poll resolve error for uid {} ({}): {}", sub.uid, sub.r#type, e);
                                 continue;
                             }
                         }
                     }
                 };
 
-                match bilibili_api::get_room_info(room_id).await {
-                    Ok(room_info) => {
-                        let new_status = LiveStatus::from_i64(room_info.live_status);
+                let room_result = match sub.r#type.as_str() {
+                    "bilibili" => api::bilibili::BilibiliApi::get_room_info(room_id).await,
+                    "huya" => api::huya::HuyaApi::get_room_info(room_id).await,
+                    _ => {
+                        warn!("未知平台类型: {}", sub.r#type);
+                        continue;
+                    }
+                };
+
+                match room_result {
+                    Ok((live_status_code, title)) => {
+                        let new_status = match sub.r#type.as_str() {
+                            "bilibili" => api::bilibili::BilibiliApi::map_live_status(live_status_code),
+                            "huya" => api::huya::HuyaApi::map_live_status(live_status_code),
+                            _ => LiveStatus::Offline,
+                        };
 
                         // Refresh user name if still unknown
                         let needs_name_refresh = {
@@ -66,24 +91,28 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                             let data = store.get_all();
                             data.subscriptions
                                 .iter()
-                                .find(|s| s.uid == sub.uid)
+                                .find(|s| s.uid == sub.uid && s.r#type == sub.r#type)
                                 .map(|s| s.name.is_none() || s.name.as_deref() == Some("未知"))
                                 .unwrap_or(false)
                         };
                         if needs_name_refresh {
-                            if let Ok((name, remote_avatar, _)) =
-                                bilibili_api::get_master_info(sub.uid).await
-                            {
+                            let refresh_result = match sub.r#type.as_str() {
+                                "bilibili" => api::bilibili::BilibiliApi::get_master_info(sub.uid).await,
+                                "huya" => api::huya::HuyaApi::get_master_info(sub.uid).await,
+                                _ => Err("未知平台".to_string()),
+                            };
+                            if let Ok((_resolved_uid, name, remote_avatar, _)) = refresh_result {
                                 let data_dir = state.data_dir.clone();
                                 if let Some(ref url) = remote_avatar {
-                                    let _ = bilibili_api::download_avatar(url, sub.uid, "bilibili", &data_dir)
+                                    let sub_type = sub.r#type.clone();
+                                    let _ = api::download_avatar(url, sub.uid, &sub_type, &data_dir)
                                         .await;
                                 }
                                 let mut store = state.store.lock().unwrap();
                                 let mut data = store.get_all();
-                                if let Some(s) =
-                                    data.subscriptions.iter_mut().find(|s| s.uid == sub.uid)
-                                {
+                                if let Some(s) = data.subscriptions.iter_mut().find(|s| {
+                                    s.uid == sub.uid && s.r#type == sub.r#type
+                                }) {
                                     s.name = Some(name);
                                 }
                                 if let Ok(v) = Value::serialize(&data.subscriptions) {
@@ -92,10 +121,11 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                             }
                         }
 
+                        let cache_key = (sub.r#type.clone(), sub.uid);
                         let prev_status = {
                             let mut cache = state.status_cache.lock().unwrap();
                             cache
-                                .insert(sub.uid, new_status.clone())
+                                .insert(cache_key, new_status.clone())
                                 .unwrap_or(LiveStatus::Offline)
                         };
 
@@ -106,10 +136,10 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                                 let s = data
                                     .subscriptions
                                     .iter()
-                                    .find(|s| s.uid == sub.uid)
+                                    .find(|s| s.uid == sub.uid && s.r#type == sub.r#type)
                                     .cloned()
                                     .unwrap_or(Subscription {
-                                        r#type: "bilibili".into(),
+                                        r#type: sub.r#type.clone(),
                                         uid: sub.uid,
                                         name: Some("未知".into()),
                                         room_id: None,
@@ -119,27 +149,29 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
 
                             let status_update = crate::state::SubscriptionStatus {
                                 uid: sub.uid,
+                                sub_type: sub.r#type.clone(),
                                 name: display_name.clone(),
                                 status: new_status.clone(),
-                                title: Some(room_info.title.clone()),
+                                title: Some(title.clone()),
                                 room_id: Some(room_id),
-                                avatar_url: Some(state.avatar_full_path("bilibili", sub.uid)),
+                                avatar_url: Some(state.avatar_full_path(&sub.r#type, sub.uid)),
                             };
                             let _ = app_handle.emit("status-changed", &status_update);
 
                             crate::notify_status_change(
                                 &app_handle,
                                 sub.uid,
+                                &sub.r#type,
                                 &display_name,
                                 &prev_status,
                                 &new_status,
                                 Some(room_id),
-                                Some(&state.avatar_full_path("bilibili", sub.uid)),
+                                Some(&state.avatar_full_path(&sub.r#type, sub.uid)),
                             );
                         }
                     }
                     Err(e) => {
-                        warn!("Poll failed for uid {}: {}", sub.uid, e);
+                        warn!("Poll failed for uid {} ({}): {}", sub.uid, sub.r#type, e);
                     }
                 }
             }

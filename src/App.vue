@@ -24,7 +24,9 @@ onMounted(async () => {
 
   await listen<SubscriptionStatus>("status-changed", (event) => {
     const updated = event.payload;
-    const idx = subscriptions.value.findIndex((s) => s.uid === updated.uid);
+    const idx = subscriptions.value.findIndex(
+      (s) => s.uid === updated.uid && s.sub_type === updated.sub_type
+    );
     if (idx >= 0) {
       subscriptions.value[idx] = updated;
     }
@@ -35,10 +37,12 @@ function onSubscriptionAdded(sub: SubscriptionStatus) {
   subscriptions.value.push(sub);
 }
 
-async function onSubscriptionRemoved(uid: number) {
+async function onSubscriptionRemoved(uid: number, subType: string) {
   try {
-    await removeSubscription(uid);
-    subscriptions.value = subscriptions.value.filter((s) => s.uid !== uid);
+    await removeSubscription(uid, subType);
+    subscriptions.value = subscriptions.value.filter(
+      (s) => !(s.uid === uid && s.sub_type === subType)
+    );
   } catch {
     // handle silently
   }
