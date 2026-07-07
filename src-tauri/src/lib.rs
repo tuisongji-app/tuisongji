@@ -591,11 +591,11 @@ async fn test_trigger_status(
         cache.insert((sub_type.clone(), uid), new_status.clone()).unwrap_or(LiveStatus::Offline)
     };
 
-    let name = {
+    let (name, room_id) = {
         let store = state.store.lock().unwrap();
         let data = store.get_all();
         let sub = data.subscriptions.iter().find(|s| s.uid == uid && s.r#type == sub_type).ok_or("订阅不存在")?;
-        sub.name.clone().unwrap_or_else(|| "未知".to_string())
+        (sub.name.clone().unwrap_or_else(|| "未知".to_string()), sub.room_id)
     };
 
     let status_update = SubscriptionStatus {
@@ -608,7 +608,7 @@ async fn test_trigger_status(
         } else {
             None
         },
-        room_id: None,
+        room_id,
         avatar_url: Some(state.avatar_full_path(&sub_type, uid)),
     };
     let _ = app_handle.emit("status-changed", &status_update);
@@ -620,7 +620,7 @@ async fn test_trigger_status(
         &name,
         &prev_status,
         &new_status,
-        None,
+        room_id,
         Some(&state.avatar_full_path(&sub_type, uid)),
     );
 
