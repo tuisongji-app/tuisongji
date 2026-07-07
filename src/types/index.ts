@@ -44,6 +44,7 @@ export interface AppConfig {
   show_window_on_startup: boolean;
   sound_enabled: boolean;
   sound_volume: number;
+  auto_check_update: boolean;
 }
 
 export const statusLabels: Record<LiveStatus, string> = {

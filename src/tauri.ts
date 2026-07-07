@@ -78,6 +78,10 @@ export function setSoundVolume(volume: number): Promise<void> {
   return invoke("set_sound_volume", { volume });
 }
 
+export function setAutoCheckUpdate(enabled: boolean): Promise<void> {
+  return invoke("set_auto_check_update", { enabled });
+}
+
 // ---- Updater ----
 
 export function restartApplication(): Promise<void> {

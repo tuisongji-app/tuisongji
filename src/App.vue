@@ -2,16 +2,24 @@
 import { onMounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
 import { Toaster } from 'vue-sonner'
+import { check } from "@tauri-apps/plugin-updater";
 
 import SubscriptionForm from "./components/SubscriptionForm.vue";
 import SubscriptionList from "./components/SubscriptionList.vue";
 import SettingsSection from "./components/SettingsSection.vue";
+import UpdateDialog from "./components/UpdateDialog.vue";
 // import TestPanel from "./components/TestPanel.vue";
-import { listSubscriptions, removeSubscription } from "@/tauri";
+import { listSubscriptions, removeSubscription, getConfig } from "@/tauri";
 import type { SubscriptionStatus } from "./types";
 
 const subscriptions = ref<SubscriptionStatus[]>([]);
 const loading = ref(true);
+const settingsRef = ref<InstanceType<typeof SettingsSection> | null>(null);
+
+// ---- Update auto-check state ----
+const showUpdateDialog = ref(false);
+const updateVersion = ref("");
+const updateBody = ref("");
 
 onMounted(async () => {
   try {
@@ -31,7 +39,27 @@ onMounted(async () => {
       subscriptions.value[idx] = updated;
     }
   });
+
+  // 自动检查更新
+  try {
+    const config = await getConfig();
+    if (config.auto_check_update) {
+      const update = await check();
+      if (update) {
+        updateVersion.value = update.version;
+        updateBody.value = update.body ?? "";
+        showUpdateDialog.value = true;
+      }
+    }
+  } catch {
+    // silently fail
+  }
 });
+
+function onUpdateNavigate() {
+  showUpdateDialog.value = false;
+  settingsRef.value?.scrollToAbout();
+}
 
 function onSubscriptionAdded(sub: SubscriptionStatus) {
   subscriptions.value.push(sub);
@@ -65,8 +93,20 @@ async function onSubscriptionRemoved(uid: number, subType: string) {
         @removed="onSubscriptionRemoved"
       />
 
-      <SettingsSection />
+      <SettingsSection
+        ref="settingsRef"
+        :auto-update-version="updateVersion"
+        :auto-update-body="updateBody"
+      />
       <!-- <TestPanel :subscriptions="subscriptions" /> -->
+
+      <UpdateDialog
+        :open="showUpdateDialog"
+        :version="updateVersion"
+        :body="updateBody"
+        @close="showUpdateDialog = false"
+        @navigate="onUpdateNavigate"
+      />
     </div>
   </div>
 </template>

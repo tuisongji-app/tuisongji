@@ -479,6 +479,18 @@ async fn set_sound_volume(
     Ok(())
 }
 
+#[tauri::command]
+async fn set_auto_check_update(
+    enabled: bool,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let mut store = state.store.lock().unwrap();
+    store
+        .set("config.auto_check_update", enabled)
+        .map_err(|e| format!("Store: {}", e))?;
+    Ok(())
+}
+
 pub fn notify_status_change(
     app_handle: &tauri::AppHandle,
     _uid: u64,
@@ -798,6 +810,7 @@ pub fn run() {
             play_streamer_sound,
             set_sound_enabled,
             set_sound_volume,
+            set_auto_check_update,
             updater::restart_application,
         ])
         .run(ctx)

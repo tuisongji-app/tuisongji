@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { NumberField, NumberFieldContent, NumberFieldDecrement, NumberFieldIncrement, NumberFieldInput } from "@/components/ui/number-field";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,6 +12,7 @@ import {
   setShowWindowOnStartup,
   setSoundEnabled,
   setSoundVolume,
+  setAutoCheckUpdate,
   restartApplication,
 } from "@/tauri";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
@@ -22,12 +23,18 @@ import { Button } from "@/components/ui/button";
 import { toast } from "vue-sonner";
 import { Settings, RefreshCw, ExternalLink, Info } from "lucide-vue-next";
 
+const props = defineProps<{
+  autoUpdateVersion?: string;
+  autoUpdateBody?: string;
+}>();
+
 const interval = ref(30);
 const badgeTimeout = ref(30);
 const autostart = ref(false);
 const showWindowOnStartup = ref(true);
 const soundEnabled = ref(true);
 const soundVolume = ref(0.8);
+const autoCheckUpdate = ref(true);
 
 // ---- Update state ----
 const appVersion = ref("");
@@ -46,6 +53,7 @@ onMounted(async () => {
     showWindowOnStartup.value = config.show_window_on_startup;
     soundEnabled.value = config.sound_enabled;
     soundVolume.value = config.sound_volume;
+    autoCheckUpdate.value = config.auto_check_update;
   } catch {
     // use default
   }
@@ -56,6 +64,16 @@ onMounted(async () => {
     appVersion.value = "0.0.0";
   }
 });
+
+watch(
+  () => props.autoUpdateVersion,
+  (ver) => {
+    if (ver) {
+      updateVersion.value = ver;
+      updateBody.value = props.autoUpdateBody ?? "";
+    }
+  },
+);
 
 function onIntervalChange(val: number) {
   if (val >= 1) updatePollInterval(val);
@@ -95,6 +113,12 @@ async function onVolumeChange(val: number[] | undefined) {
   await setSoundVolume(v);
 }
 
+async function onAutoCheckUpdateChange(val: boolean | "indeterminate") {
+  if (typeof val !== "boolean") return;
+  autoCheckUpdate.value = val;
+  await setAutoCheckUpdate(val);
+}
+
 async function handleCheckUpdate() {
   updateChecking.value = true;
   updateVersion.value = "";
@@ -132,6 +156,15 @@ async function handleDownloadAndInstall() {
 async function handleRestart() {
   await restartApplication();
 }
+
+// ---- exposed ----
+const aboutSectionRef = ref<HTMLElement | null>(null);
+
+function scrollToAbout() {
+  aboutSectionRef.value?.scrollIntoView({ behavior: "smooth" });
+}
+
+defineExpose({ scrollToAbout });
 </script>
 
 <template>
@@ -242,13 +275,26 @@ async function handleRestart() {
         />
       </div>
 
+      <!-- 自动检查更新 -->
+      <div class="flex items-center justify-between">
+        <div>
+          <span class="text-sm">自动检查更新</span>
+          <p class="text-xs text-muted-foreground mt-0.5">启动时自动检查是否有新版本</p>
+        </div>
+        <Checkbox
+          :model-value="autoCheckUpdate"
+          class="shrink-0"
+          @update:model-value="onAutoCheckUpdateChange"
+        />
+      </div>
+
     </div>
   </div>
 
   <Separator class="my-6" />
 
   <!-- 关于 -->
-  <div>
+  <div ref="aboutSectionRef">
     <div class="flex items-center gap-2 mb-4">
       <Info class="w-4 h-4 text-muted-foreground" />
       <h2 class="text-sm font-semibold text-muted-foreground">关于</h2>

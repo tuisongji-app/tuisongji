@@ -29,6 +29,7 @@ pub struct AppConfig {
     pub show_window_on_startup: bool,
     pub sound_enabled: bool,
     pub sound_volume: f32,
+    pub auto_check_update: bool,
 }
 
 impl Default for AppConfig {
@@ -40,6 +41,7 @@ impl Default for AppConfig {
             show_window_on_startup: true,
             sound_enabled: true,
             sound_volume: 0.8,
+            auto_check_update: true,
         }
     }
 }

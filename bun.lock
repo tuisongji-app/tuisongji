@@ -5,7 +5,7 @@
     "": {
       "name": "tuisongji",
       "dependencies": {
-        "@lucide/vue": "^1.22.0",
+        "@lucide/vue": "^1.23.0",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-autostart": "~2",
         "@tauri-apps/plugin-opener": "^2",
@@ -115,7 +115,7 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@lucide/vue": ["@lucide/vue@1.22.0", "", { "peerDependencies": { "vue": ">=3.0.1" } }, "sha512-2/+mGF+NrHieiGTwq5wHRVsLhtzoY8x64ovvQkVYDXLrLHKqE/58xR/hveFsxkH0Ey4M8UsvsYNxAHjPgbTyqQ=="],
+    "@lucide/vue": ["@lucide/vue@1.23.0", "", { "peerDependencies": { "vue": ">=3.0.1" } }, "sha512-9SIYeY5K+R1iv8F8JUKMGSL7Pck/86BJ8djtZz/lnYsoHtKFUj1H2z6+PvKnC/8blZ8tqTDeDXAoTKobuX80hg=="],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.62.2", "", { "os": "android", "cpu": "arm" }, "sha512-6o7ZLZK+BeenkZCFNDXqpbjw9bD6nuWonvS/lwQJp7NoVVxm6p3qE7qQ5jGuBjiFsgvqjD8mZAU5oWxTmbOeOg=="],
 
