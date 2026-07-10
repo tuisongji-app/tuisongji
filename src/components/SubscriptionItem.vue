@@ -66,9 +66,14 @@ const hasUndownloaded = computed(() => {
 function openRoom() {
   if (props.subscription.room_id) {
     const subType = props.subscription.sub_type || "bilibili";
-    const url = subType === "huya"
-      ? `https://www.huya.com/${props.subscription.room_id}`
-      : `https://live.bilibili.com/${props.subscription.room_id}`;
+    let url: string;
+    if (subType === "huya") {
+      url = `https://www.huya.com/${props.subscription.room_id}`;
+    } else if (subType === "douyu") {
+      url = `https://www.douyu.com/${props.subscription.room_id}`;
+    } else {
+      url = `https://live.bilibili.com/${props.subscription.room_id}`;
+    }
     openUrl(url);
   }
 }

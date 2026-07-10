@@ -1,6 +1,6 @@
 export type LiveStatus = "offline" | "live" | "replay";
 
-export type SubType = "bilibili" | "huya";
+export type SubType = "bilibili" | "huya" | "douyu";
 
 export type InputMode = "uid" | "room";
 
@@ -12,11 +12,19 @@ export const inputModeLabels: Record<InputMode, string> = {
 export const subTypeLabels: Record<SubType, string> = {
   bilibili: "B站",
   huya: "虎牙",
+  douyu: "斗鱼",
 };
 
 export const subTypePlaceholders: Record<SubType, string> = {
   bilibili: "输入B站UP主的UID...",
   huya: "输入虎牙用户UID...",
+  douyu: "输入斗鱼房间号...",
+};
+
+export const subTypeRoomPlaceholders: Record<SubType, string> = {
+  bilibili: "输入B站直播间房间号...",
+  huya: "输入虎牙房间号...",
+  douyu: "输入斗鱼房间号...",
 };
 
 export interface SubscriptionStatus {

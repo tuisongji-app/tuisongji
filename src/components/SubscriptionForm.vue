@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { addSubscription } from "@/tauri";
 import { Plus } from "lucide-vue-next";
 import { toast } from "vue-sonner";
-import { subTypeLabels, subTypePlaceholders, inputModeLabels } from "@/types";
+import { subTypeLabels, subTypePlaceholders, subTypeRoomPlaceholders, inputModeLabels } from "@/types";
 import type { SubscriptionStatus, SubType, InputMode } from "@/types";
 
 const emit = defineEmits<{
@@ -17,17 +17,22 @@ const subType = ref<SubType>("bilibili");
 const inputMode = ref<InputMode>("uid");
 const loading = ref(false);
 
-const platforms: SubType[] = ["bilibili", "huya"];
+const platforms: SubType[] = ["bilibili", "huya", "douyu"];
 const inputModes: InputMode[] = ["uid", "room"];
 
-const placeholder = computed(() => {
-  const base = subTypePlaceholders[subType.value];
-  if (inputMode.value === "room") {
-    return subType.value === "bilibili"
-      ? "输入B站直播间房间号..."
-      : "输入虎牙房间号...";
+const isDouyu = computed(() => subType.value === "douyu");
+
+const placeholder = computed(() =>
+  inputMode.value === "room" || isDouyu.value
+    ? subTypeRoomPlaceholders[subType.value]
+    : subTypePlaceholders[subType.value],
+);
+
+// 斗鱼仅支持房间号，选择斗鱼时自动切换
+watch(subType, (newType) => {
+  if (newType === "douyu") {
+    inputMode.value = "room";
   }
-  return base;
 });
 
 async function handleAdd() {
@@ -72,7 +77,7 @@ async function handleAdd() {
           {{ subTypeLabels[p] }}
         </button>
       </div>
-      <div class="flex rounded-md border border-input bg-transparent">
+      <div v-if="!isDouyu" class="flex rounded-md border border-input bg-transparent">
         <button
           v-for="m in inputModes"
           :key="m"

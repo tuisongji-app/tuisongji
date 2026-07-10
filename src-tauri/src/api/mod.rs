@@ -1,4 +1,5 @@
 pub mod bilibili;
+pub mod douyu;
 pub mod huya;
 
 use async_trait::async_trait;

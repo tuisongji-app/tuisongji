@@ -107,6 +107,7 @@ fn show_window(app_handle: &tauri::AppHandle) {
 fn platform_display_name(sub_type: &str) -> &str {
     match sub_type {
         "huya" => "虎牙",
+        "douyu" => "斗鱼",
         _ => "bilibili",
     }
 }
@@ -216,6 +217,7 @@ async fn add_subscription(
         "bilibili" => api::bilibili::BilibiliApi::get_master_info(uid).await?,
         "huya" if input_mode == "room" => api::huya::HuyaApi::get_master_info_by_room(uid).await?,
         "huya" => api::huya::HuyaApi::get_master_info(uid).await?,
+        "douyu" => api::douyu::DouyuApi::get_master_info_by_room(uid).await?,
         _ => return Err(format!("不支持的平台: {}", sub_type)),
     };
 
@@ -237,11 +239,13 @@ async fn add_subscription(
     let (live_status_code, title) = match sub_type.as_str() {
         "bilibili" => api::bilibili::BilibiliApi::get_room_info(room_id).await?,
         "huya" => api::huya::HuyaApi::get_room_info(room_id).await?,
+        "douyu" => api::douyu::DouyuApi::get_room_info(room_id).await?,
         _ => return Err(format!("不支持的平台: {}", sub_type)),
     };
     let status = match sub_type.as_str() {
         "bilibili" => api::bilibili::BilibiliApi::map_live_status(live_status_code),
         "huya" => api::huya::HuyaApi::map_live_status(live_status_code),
+        "douyu" => api::douyu::DouyuApi::map_live_status(live_status_code),
         _ => return Err(format!("不支持的平台: {}", sub_type)),
     };
 
@@ -354,11 +358,13 @@ async fn refresh_status(
     let (live_status_code, title) = match sub_type.as_str() {
         "bilibili" => api::bilibili::BilibiliApi::get_room_info(room_id).await?,
         "huya" => api::huya::HuyaApi::get_room_info(room_id).await?,
+        "douyu" => api::douyu::DouyuApi::get_room_info(room_id).await?,
         _ => return Err(format!("不支持的平台: {}", sub_type)),
     };
     let status = match sub_type.as_str() {
         "bilibili" => api::bilibili::BilibiliApi::map_live_status(live_status_code),
         "huya" => api::huya::HuyaApi::map_live_status(live_status_code),
+        "douyu" => api::douyu::DouyuApi::map_live_status(live_status_code),
         _ => return Err(format!("不支持的平台: {}", sub_type)),
     };
 
@@ -776,6 +782,7 @@ pub fn run() {
                                 let url = if let Some(n) = notifs.iter().find(|n| n.room_id == rid) {
                                     match n.sub_type.as_str() {
                                         "huya" => api::huya::HuyaApi::room_url(rid),
+                                        "douyu" => api::douyu::DouyuApi::room_url(rid),
                                         _ => api::bilibili::BilibiliApi::room_url(rid),
                                     }
                                 } else {

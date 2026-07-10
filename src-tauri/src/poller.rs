@@ -28,6 +28,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                         let resolve_result = match sub.r#type.as_str() {
                             "bilibili" => api::bilibili::BilibiliApi::get_master_info(sub.uid).await,
                             "huya" => api::huya::HuyaApi::get_master_info(sub.uid).await,
+                            "douyu" => api::douyu::DouyuApi::get_master_info(sub.uid).await,
                             _ => {
                                 error!("未知平台类型: {}", sub.r#type);
                                 continue;
@@ -71,6 +72,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                 let room_result = match sub.r#type.as_str() {
                     "bilibili" => api::bilibili::BilibiliApi::get_room_info(room_id).await,
                     "huya" => api::huya::HuyaApi::get_room_info(room_id).await,
+                    "douyu" => api::douyu::DouyuApi::get_room_info(room_id).await,
                     _ => {
                         warn!("未知平台类型: {}", sub.r#type);
                         continue;
@@ -82,6 +84,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                         let new_status = match sub.r#type.as_str() {
                             "bilibili" => api::bilibili::BilibiliApi::map_live_status(live_status_code),
                             "huya" => api::huya::HuyaApi::map_live_status(live_status_code),
+                            "douyu" => api::douyu::DouyuApi::map_live_status(live_status_code),
                             _ => LiveStatus::Offline,
                         };
 
@@ -99,6 +102,7 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                             let refresh_result = match sub.r#type.as_str() {
                                 "bilibili" => api::bilibili::BilibiliApi::get_master_info(sub.uid).await,
                                 "huya" => api::huya::HuyaApi::get_master_info(sub.uid).await,
+                                "douyu" => api::douyu::DouyuApi::get_master_info(sub.uid).await,
                                 _ => Err("未知平台".to_string()),
                             };
                             if let Ok((_resolved_uid, name, remote_avatar, _)) = refresh_result {
