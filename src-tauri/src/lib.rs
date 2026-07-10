@@ -424,26 +424,33 @@ async fn get_config(
 
 // ---- Sound commands ----
 
-/// 从 manifest 和本地文件系统构建 SoundInfo
+/// 从 manifest 和本地文件系统构建 SoundInfo。
+/// "可用"列表 = manifest 中的文件 ∪ 本地已下载的文件（手动添加的也能显示）。
 async fn build_sound_info(name: &str, data_dir: &std::path::Path) -> state::SoundInfo {
     let sounds = github_sounds::get_sounds_for_name(name).await.unwrap_or(None);
-    let (live_files, offline_files): (Vec<String>, Vec<String>) = sounds
+    let (manifest_live, manifest_offline): (Vec<String>, Vec<String>) = sounds
         .as_ref()
         .map(|s| (s.live.clone(), s.offline.clone()))
         .unwrap_or_default();
-    let avail_live = live_files.len() as u32;
-    let avail_offline = offline_files.len() as u32;
 
     let (dl_live_files, dl_offline_files) = sound::list_downloaded_files(name, data_dir);
-    let dl_live = dl_live_files.len() as u32;
-    let dl_offline = dl_offline_files.len() as u32;
+
+    // 合并 manifest + 本地文件，去重
+    let mut live_files = manifest_live.clone();
+    for f in &dl_live_files {
+        if !live_files.contains(f) { live_files.push(f.clone()); }
+    }
+    let mut offline_files = manifest_offline.clone();
+    for f in &dl_offline_files {
+        if !offline_files.contains(f) { offline_files.push(f.clone()); }
+    }
 
     state::SoundInfo {
         name: name.to_string(),
-        available_live: avail_live,
-        available_offline: avail_offline,
-        downloaded_live: dl_live,
-        downloaded_offline: dl_offline,
+        available_live: live_files.len() as u32,
+        available_offline: offline_files.len() as u32,
+        downloaded_live: dl_live_files.len() as u32,
+        downloaded_offline: dl_offline_files.len() as u32,
         live_files,
         offline_files,
         downloaded_live_files: dl_live_files,
