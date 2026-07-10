@@ -55,6 +55,10 @@ export function testTriggerStatus(
 
 // ---- Sound effects ----
 
+export function refreshSoundManifest(): Promise<void> {
+  return invoke("refresh_sound_manifest");
+}
+
 export function downloadStreamerSounds(name: string): Promise<SoundInfo> {
   return invoke("download_streamer_sounds", { name });
 }

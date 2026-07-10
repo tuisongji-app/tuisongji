@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Mutex;
 
 const REPO_OWNER: &str = "tuisongji-app";
 const REPO_NAME: &str = "sound";
@@ -19,12 +20,14 @@ pub struct Manifest {
     pub channels: HashMap<String, Sounds>,
 }
 
+static MANIFEST_CACHE: Mutex<Option<Manifest>> = Mutex::new(None);
+
 fn raw_url(path: &str) -> String {
     format!("{}/{}/{}/main/{}", RAW_BASE, REPO_OWNER, REPO_NAME, path)
 }
 
-/// Fetch the manifest from GitHub.
-pub async fn fetch_manifest() -> Result<Manifest, String> {
+/// 从 GitHub 请求 manifest 并写入缓存
+async fn do_fetch_manifest() -> Result<Manifest, String> {
     let client = reqwest::Client::new();
     let url = raw_url("manifest.json");
     let resp = client
@@ -38,9 +41,31 @@ pub async fn fetch_manifest() -> Result<Manifest, String> {
         return Err(format!("Manifest fetch HTTP {}", resp.status()));
     }
 
-    resp.json::<Manifest>()
+    let manifest: Manifest = resp
+        .json()
         .await
-        .map_err(|e| format!("Failed to parse manifest: {}", e))
+        .map_err(|e| format!("Failed to parse manifest: {}", e))?;
+
+    if let Ok(mut cache) = MANIFEST_CACHE.lock() {
+        *cache = Some(manifest.clone());
+    }
+
+    Ok(manifest)
+}
+
+/// 获取 manifest：有缓存返回缓存，无则请求
+pub async fn fetch_manifest() -> Result<Manifest, String> {
+    if let Ok(cache) = MANIFEST_CACHE.lock() {
+        if let Some(ref manifest) = *cache {
+            return Ok(manifest.clone());
+        }
+    }
+    do_fetch_manifest().await
+}
+
+/// 强制刷新 manifest 缓存（手动刷新时调用）
+pub async fn refresh_manifest() -> Result<Manifest, String> {
+    do_fetch_manifest().await
 }
 
 /// Download all missing sound files for a given streamer name.

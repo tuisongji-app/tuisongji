@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from "vue";
+import { computed, ref, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Badge } from "@/components/ui/badge";
@@ -9,10 +9,11 @@ import { Trash2, ExternalLink, Volume2 } from "lucide-vue-next";
 import { statusLabels, statusVariants } from "@/types";
 import type { SubscriptionStatus, SoundInfo } from "@/types";
 import { toast } from "vue-sonner";
-import { getSoundInfo, downloadStreamerSounds, playStreamerSound } from "@/tauri";
+import { downloadStreamerSounds, playStreamerSound } from "@/tauri";
 
 const props = defineProps<{
   subscription: SubscriptionStatus;
+  soundInfo: SoundInfo | null;
 }>();
 
 const emit = defineEmits<{
@@ -25,17 +26,13 @@ const avatarSrc = computed(() => {
   return convertFileSrc(url);
 });
 
-// ---- Sound state ----
+// ---- Sound state (初始化自 prop，下载后本地更新) ----
 
-const soundState = ref<SoundInfo | null>(null);
+const soundState = ref<SoundInfo | null>(props.soundInfo);
 const soundLoading = ref(false);
 
-onMounted(async () => {
-  try {
-    soundState.value = await getSoundInfo(props.subscription.name);
-  } catch {
-    // no sounds available or network error — leave as null
-  }
+watch(() => props.soundInfo, (val) => {
+  soundState.value = val;
 });
 
 async function handleDownloadSounds() {

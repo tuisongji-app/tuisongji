@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-vue-next";
 import SubscriptionItem from "./SubscriptionItem.vue";
-import { refreshStatus } from "@/tauri";
-import type { SubscriptionStatus } from "@/types";
+import { refreshStatus, refreshSoundManifest, getSoundInfo } from "@/tauri";
+import type { SubscriptionStatus, SoundInfo } from "@/types";
 
 const props = defineProps<{
   subscriptions: SubscriptionStatus[];
@@ -18,9 +18,34 @@ const emit = defineEmits<{
 const leaving = ref(0);
 const refreshing = ref(false);
 
+// 音效数据由外层统一获取，key = `${sub_type}:${uid}`
+const soundStates = reactive<Record<string, SoundInfo | null>>({});
+
+function soundKey(sub: SubscriptionStatus) {
+  return `${sub.sub_type}:${sub.uid}`;
+}
+
+async function fetchAllSoundInfos() {
+  // 先刷新 manifest 缓存（一次网络请求），再并行取各项音效（命中缓存）
+  await refreshSoundManifest().catch(() => {});
+  const results = await Promise.allSettled(
+    props.subscriptions.map((sub) => getSoundInfo(sub.name))
+  );
+  props.subscriptions.forEach((sub, i) => {
+    const result = results[i];
+    soundStates[soundKey(sub)] =
+      result.status === "fulfilled" ? result.value : null;
+  });
+}
+
+onMounted(fetchAllSoundInfos);
+
 async function handleRefresh() {
   refreshing.value = true;
   const minDuration = new Promise((r) => setTimeout(r, 300));
+
+  await fetchAllSoundInfos();
+
   const results = await Promise.allSettled(
     props.subscriptions.map((sub) => refreshStatus(sub.uid, sub.sub_type))
   );
@@ -68,6 +93,7 @@ async function handleRefresh() {
         v-for="sub in subscriptions"
         :key="`${sub.sub_type}:${sub.uid}`"
         :subscription="sub"
+        :sound-info="soundStates[`${sub.sub_type}:${sub.uid}`] ?? null"
         @remove="(uid: number, subType: string) => emit('removed', uid, subType)"
       />
     </TransitionGroup>

@@ -425,6 +425,12 @@ async fn get_config(
 // ---- Sound commands ----
 
 #[tauri::command]
+async fn refresh_sound_manifest() -> Result<(), String> {
+    github_sounds::refresh_manifest().await?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn download_streamer_sounds(
     name: String,
     state: tauri::State<'_, Arc<AppState>>,
@@ -830,6 +836,7 @@ pub fn run() {
             set_show_window_on_startup,
             download_streamer_sounds,
             get_sound_info,
+            refresh_sound_manifest,
             play_streamer_sound,
             set_sound_enabled,
             set_sound_volume,
