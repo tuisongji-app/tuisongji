@@ -5,11 +5,11 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trash2, ExternalLink, Volume2 } from "lucide-vue-next";
+import { Trash2, ExternalLink, Volume2, Play, Download } from "lucide-vue-next";
 import { statusLabels, statusVariants } from "@/types";
 import type { SubscriptionStatus, SoundInfo } from "@/types";
 import { toast } from "vue-sonner";
-import { downloadStreamerSounds, playStreamerSound } from "@/tauri";
+import { downloadStreamerSounds, playSoundFile } from "@/tauri";
 
 const props = defineProps<{
   subscription: SubscriptionStatus;
@@ -35,6 +35,20 @@ watch(() => props.soundInfo, (val) => {
   soundState.value = val;
 });
 
+function isDownloaded(eventType: string, filename: string): boolean {
+  if (!soundState.value) return false;
+  const files = eventType === "live"
+    ? soundState.value.downloaded_live_files
+    : soundState.value.downloaded_offline_files;
+  return files.includes(filename);
+}
+
+function handlePlayFile(eventType: string, filename: string) {
+  playSoundFile(props.subscription.name, eventType, filename).catch(() => {
+    toast.error("音效播放失败");
+  });
+}
+
 async function handleDownloadSounds() {
   soundLoading.value = true;
   try {
@@ -44,12 +58,6 @@ async function handleDownloadSounds() {
   } finally {
     soundLoading.value = false;
   }
-}
-
-function handlePreviewSound(eventType: string) {
-  playStreamerSound(props.subscription.name, eventType).catch(() => {
-    toast.error("音效播放失败");
-  });
 }
 
 const hasUndownloaded = computed(() => {
@@ -123,45 +131,51 @@ function openRoom() {
         v-if="soundState !== null && (soundState.available_live > 0 || soundState.available_offline > 0)"
         class="mt-3 pt-3 border-t border-border"
       >
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Volume2 class="w-3.5 h-3.5 flex-shrink-0" />
-            <template v-if="soundState.downloaded_live > 0 || soundState.downloaded_offline > 0">
+            <span v-if="soundState.downloaded_live + soundState.downloaded_offline > 0">
               音效: {{ soundState.downloaded_live + soundState.downloaded_offline }}/{{ soundState.available_live + soundState.available_offline }} 已下载
-            </template>
-            <template v-else>
+            </span>
+            <span v-else>
               有 {{ soundState.available_live + soundState.available_offline }} 个音效可用
-            </template>
+            </span>
           </div>
-          <div class="flex gap-1 flex-shrink-0">
-            <Button
-              v-if="hasUndownloaded"
-              variant="outline"
-              size="sm"
-              class="h-7 text-xs"
-              :disabled="soundLoading"
-              @click="handleDownloadSounds"
-            >
-              {{ soundLoading ? '下载中...' : '下载音效' }}
-            </Button>
-            <Button
-              v-if="soundState.downloaded_live > 0"
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs"
-              @click="handlePreviewSound('live')"
-            >
-              预览开播
-            </Button>
-            <Button
-              v-if="soundState.downloaded_offline > 0"
-              variant="ghost"
-              size="sm"
-              class="h-7 text-xs"
-              @click="handlePreviewSound('offline')"
-            >
-              预览下播
-            </Button>
+          <Button
+            v-if="hasUndownloaded"
+            variant="outline"
+            size="sm"
+            class="h-7 text-xs"
+            :disabled="soundLoading"
+            @click="handleDownloadSounds"
+          >
+            <Download class="w-3 h-3 mr-1" />
+            {{ soundLoading ? "下载中..." : "下载全部" }}
+          </Button>
+        </div>
+
+        <!-- File list grouped by event type -->
+        <div
+          v-for="(files, eventType) in { 开播: soundState.live_files, 下播: soundState.offline_files }"
+          :key="eventType"
+        >
+          <div v-if="files.length > 0" class="mb-1">
+            <span class="text-xs text-muted-foreground/70">{{ eventType }}</span>
+            <div class="flex flex-wrap gap-1 mt-0.5">
+              <button
+                v-for="file in files"
+                :key="file"
+                :disabled="!isDownloaded(eventType === '开播' ? 'live' : 'offline', file)"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors"
+                :class="isDownloaded(eventType === '开播' ? 'live' : 'offline', file)
+                  ? 'bg-secondary hover:bg-secondary/80 cursor-pointer'
+                  : 'text-muted-foreground/40 cursor-default'"
+                @click="handlePlayFile(eventType === '开播' ? 'live' : 'offline', file)"
+              >
+                <Play class="w-2.5 h-2.5" />
+                {{ file }}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -106,14 +106,10 @@ pub async fn download_sounds_for_name(
     Ok((dl_live, dl_offline))
 }
 
-/// Returns the available sound counts for a streamer from the manifest.
-/// Returns `(live_count, offline_count)`.
-pub async fn available_sounds_for_name(name: &str) -> Result<(u32, u32), String> {
+/// Returns the available sound file lists for a streamer from the manifest.
+pub async fn get_sounds_for_name(name: &str) -> Result<Option<Sounds>, String> {
     let manifest = fetch_manifest().await?;
-    match manifest.channels.get(name) {
-        Some(s) => Ok((s.live.len() as u32, s.offline.len() as u32)),
-        None => Ok((0, 0)),
-    }
+    Ok(manifest.channels.get(name).cloned())
 }
 
 /// Try to download a single sound file. Returns `Ok(true)` if downloaded,

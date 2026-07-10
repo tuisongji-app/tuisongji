@@ -64,6 +64,10 @@ pub struct SoundInfo {
     pub available_offline: u32,
     pub downloaded_live: u32,
     pub downloaded_offline: u32,
+    pub live_files: Vec<String>,
+    pub offline_files: Vec<String>,
+    pub downloaded_live_files: Vec<String>,
+    pub downloaded_offline_files: Vec<String>,
 }
 
 /// Persisted state — managed by Store

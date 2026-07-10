@@ -129,21 +129,23 @@ pub fn play_random_for_streamer(
     play_file(chosen, volume)
 }
 
-/// Count downloaded sound files for a streamer.
-/// Returns `(live_count, offline_count)`.
-pub fn count_downloaded(name: &str, data_dir: &Path) -> (u32, u32) {
+/// List downloaded file names for a streamer.
+/// Returns `(live_files, offline_files)`.
+pub fn list_downloaded_files(name: &str, data_dir: &Path) -> (Vec<String>, Vec<String>) {
     let base = data_dir.join("sounds").join(name);
-    let live_count = count_files_in_dir(&base.join("live"));
-    let offline_count = count_files_in_dir(&base.join("offline"));
-    (live_count, offline_count)
+    (
+        list_files_in_dir(&base.join("live")),
+        list_files_in_dir(&base.join("offline")),
+    )
 }
 
-fn count_files_in_dir(dir: &Path) -> u32 {
+fn list_files_in_dir(dir: &Path) -> Vec<String> {
     match fs::read_dir(dir) {
         Ok(entries) => entries
             .filter_map(|e| e.ok())
             .filter(|e| e.path().is_file())
-            .count() as u32,
-        Err(_) => 0,
+            .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+            .collect(),
+        Err(_) => vec![],
     }
 }

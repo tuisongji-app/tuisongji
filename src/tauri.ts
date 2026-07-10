@@ -74,6 +74,14 @@ export function playStreamerSound(
   return invoke("play_streamer_sound", { name, eventType });
 }
 
+export function playSoundFile(
+  name: string,
+  eventType: string,
+  filename: string,
+): Promise<void> {
+  return invoke("play_sound_file", { name, eventType, filename });
+}
+
 export function setSoundEnabled(enabled: boolean): Promise<void> {
   return invoke("set_sound_enabled", { enabled });
 }

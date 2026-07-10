@@ -424,6 +424,33 @@ async fn get_config(
 
 // ---- Sound commands ----
 
+/// 从 manifest 和本地文件系统构建 SoundInfo
+async fn build_sound_info(name: &str, data_dir: &std::path::Path) -> state::SoundInfo {
+    let sounds = github_sounds::get_sounds_for_name(name).await.unwrap_or(None);
+    let (live_files, offline_files): (Vec<String>, Vec<String>) = sounds
+        .as_ref()
+        .map(|s| (s.live.clone(), s.offline.clone()))
+        .unwrap_or_default();
+    let avail_live = live_files.len() as u32;
+    let avail_offline = offline_files.len() as u32;
+
+    let (dl_live_files, dl_offline_files) = sound::list_downloaded_files(name, data_dir);
+    let dl_live = dl_live_files.len() as u32;
+    let dl_offline = dl_offline_files.len() as u32;
+
+    state::SoundInfo {
+        name: name.to_string(),
+        available_live: avail_live,
+        available_offline: avail_offline,
+        downloaded_live: dl_live,
+        downloaded_offline: dl_offline,
+        live_files,
+        offline_files,
+        downloaded_live_files: dl_live_files,
+        downloaded_offline_files: dl_offline_files,
+    }
+}
+
 #[tauri::command]
 async fn refresh_sound_manifest() -> Result<(), String> {
     github_sounds::refresh_manifest().await?;
@@ -435,20 +462,8 @@ async fn download_streamer_sounds(
     name: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<state::SoundInfo, String> {
-    let (avail_live, avail_offline) =
-        github_sounds::available_sounds_for_name(&name).await.unwrap_or((0, 0));
-
     github_sounds::download_sounds_for_name(&name, &state.data_dir).await?;
-
-    let (dl_live, dl_offline) = sound::count_downloaded(&name, &state.data_dir);
-
-    Ok(state::SoundInfo {
-        name,
-        available_live: avail_live,
-        available_offline: avail_offline,
-        downloaded_live: dl_live,
-        downloaded_offline: dl_offline,
-    })
+    Ok(build_sound_info(&name, &state.data_dir).await)
 }
 
 #[tauri::command]
@@ -456,17 +471,7 @@ async fn get_sound_info(
     name: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<state::SoundInfo, String> {
-    let (avail_live, avail_offline) =
-        github_sounds::available_sounds_for_name(&name).await.unwrap_or((0, 0));
-    let (dl_live, dl_offline) = sound::count_downloaded(&name, &state.data_dir);
-
-    Ok(state::SoundInfo {
-        name,
-        available_live: avail_live,
-        available_offline: avail_offline,
-        downloaded_live: dl_live,
-        downloaded_offline: dl_offline,
-    })
+    Ok(build_sound_info(&name, &state.data_dir).await)
 }
 
 #[tauri::command]
@@ -480,6 +485,26 @@ async fn play_streamer_sound(
         store.get_all().config
     };
     sound::play_random_for_streamer(&name, &event_type, config.sound_volume, &state.data_dir)
+}
+
+#[tauri::command]
+async fn play_sound_file(
+    name: String,
+    event_type: String,
+    filename: String,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let config = {
+        let store = state.store.lock().unwrap();
+        store.get_all().config
+    };
+    let path = state
+        .data_dir
+        .join("sounds")
+        .join(&name)
+        .join(&event_type)
+        .join(&filename);
+    sound::play_file(&path, config.sound_volume)
 }
 
 #[tauri::command]
@@ -838,6 +863,7 @@ pub fn run() {
             get_sound_info,
             refresh_sound_manifest,
             play_streamer_sound,
+            play_sound_file,
             set_sound_enabled,
             set_sound_volume,
             set_auto_check_update,

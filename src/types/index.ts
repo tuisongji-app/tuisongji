@@ -43,6 +43,10 @@ export interface SoundInfo {
   available_offline: number;
   downloaded_live: number;
   downloaded_offline: number;
+  live_files: string[];
+  offline_files: string[];
+  downloaded_live_files: string[];
+  downloaded_offline_files: string[];
 }
 
 export interface AppConfig {
