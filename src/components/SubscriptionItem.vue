@@ -5,11 +5,11 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trash2, ExternalLink, Volume2, Play, Download } from "lucide-vue-next";
+import { Trash2, ExternalLink, Volume2, Play, Download, FolderOpen } from "lucide-vue-next";
 import { statusLabels, statusVariants } from "@/types";
 import type { SubscriptionStatus, SoundInfo } from "@/types";
 import { toast } from "vue-sonner";
-import { downloadStreamerSounds, playSoundFile } from "@/tauri";
+import { downloadStreamerSounds, playSoundFile, openSoundsDir } from "@/tauri";
 
 const props = defineProps<{
   subscription: SubscriptionStatus;
@@ -141,17 +141,28 @@ function openRoom() {
               有 {{ soundState.available_live + soundState.available_offline }} 个音效可用
             </span>
           </div>
-          <Button
-            v-if="hasUndownloaded"
-            variant="outline"
-            size="sm"
-            class="h-7 text-xs"
-            :disabled="soundLoading"
-            @click="handleDownloadSounds"
-          >
-            <Download class="w-3 h-3 mr-1" />
-            {{ soundLoading ? "下载中..." : "下载全部" }}
-          </Button>
+          <div class="flex gap-1">
+            <Button
+              v-if="hasUndownloaded"
+              variant="outline"
+              size="sm"
+              class="h-7 text-xs"
+              :disabled="soundLoading"
+              @click="handleDownloadSounds"
+            >
+              <Download class="w-3 h-3 mr-1" />
+              {{ soundLoading ? "下载中..." : "下载全部" }}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7"
+              title="打开音效文件夹"
+              @click="openSoundsDir(subscription.name)"
+            >
+              <FolderOpen class="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
 
         <!-- File list grouped by event type -->

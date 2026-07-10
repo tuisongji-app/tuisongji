@@ -74,6 +74,10 @@ export function playStreamerSound(
   return invoke("play_streamer_sound", { name, eventType });
 }
 
+export function openSoundsDir(name: string): Promise<void> {
+  return invoke("open_sounds_dir", { name });
+}
+
 export function playSoundFile(
   name: string,
   eventType: string,

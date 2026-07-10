@@ -515,6 +515,21 @@ async fn play_sound_file(
 }
 
 #[tauri::command]
+async fn open_sounds_dir(
+    name: String,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    let dir = state.data_dir.join("sounds").join(&name);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create dir: {}", e))?;
+    app_handle
+        .opener()
+        .open_path(dir.to_string_lossy().as_ref(), None::<&str>)
+        .map_err(|e| format!("Failed to open dir: {}", e))
+}
+
+#[tauri::command]
 async fn set_sound_enabled(
     enabled: bool,
     state: tauri::State<'_, Arc<AppState>>,
@@ -869,6 +884,7 @@ pub fn run() {
             download_streamer_sounds,
             get_sound_info,
             refresh_sound_manifest,
+            open_sounds_dir,
             play_streamer_sound,
             play_sound_file,
             set_sound_enabled,
