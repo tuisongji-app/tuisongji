@@ -98,6 +98,24 @@ export function setAutoCheckUpdate(enabled: boolean): Promise<void> {
   return invoke("set_auto_check_update", { enabled });
 }
 
+// ---- Overlay toast notifications ----
+
+export function dismissNotif(roomId: number): Promise<void> {
+  return invoke("dismiss_notif", { roomId });
+}
+
+export function clearAllNotifs(): Promise<void> {
+  return invoke("clear_all_notifs");
+}
+
+export function openNotifUrl(roomId: number, subType: string): Promise<void> {
+  return invoke("open_notif_url", { roomId, subType });
+}
+
+export function triggerCollapse(): Promise<void> {
+  return invoke("trigger_collapse");
+}
+
 // ---- Updater ----
 
 export function restartApplication(): Promise<void> {

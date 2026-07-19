@@ -43,3 +43,6 @@ rand = "0.8"
 async-trait = "0.1"
 scraper = "0.20"
 
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+

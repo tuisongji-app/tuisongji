@@ -3,6 +3,8 @@ mod github_sounds;
 mod poller;
 mod sound;
 mod state;
+#[cfg(target_os = "windows")]
+mod toast_overlay;
 mod updater;
 
 use api::PlatformApi;
@@ -18,6 +20,7 @@ use tauri_plugin_opener::OpenerExt;
 
 // ---- Notification queue ----
 
+#[derive(Clone)]
 struct NotifItem {
     room_id: u64,
     name: String,
@@ -26,7 +29,7 @@ struct NotifItem {
     sub_type: String,
 }
 
-static NOTIFS: Mutex<Vec<NotifItem>> = Mutex::new(Vec::new());
+pub(crate) static NOTIFS: Mutex<Vec<NotifItem>> = Mutex::new(Vec::new());
 static BADGE_TIMER: Mutex<Option<tauri::async_runtime::JoinHandle<()>>> = Mutex::new(None);
 
 fn reset_title_timer(app_handle: tauri::AppHandle) {
@@ -46,10 +49,13 @@ fn reset_title_timer(app_handle: tauri::AppHandle) {
 
     *timer = Some(tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(timeout_mins * 60)).await;
-        if let Some(tray) = h.tray_by_id("main") {
-            let notifs = NOTIFS.lock().unwrap();
-            if !notifs.is_empty() {
-                let _ = tray.set_title(Some(&format!("({})", notifs.len())));
+        let count = NOTIFS.lock().unwrap().len();
+        if count > 1 {
+            let _ = h.emit("toast-collapse", ());
+            #[cfg(target_os = "windows")]
+            crate::toast_overlay::collapse(&h);
+            if let Some(tray) = h.tray_by_id("main") {
+                let _ = tray.set_title(Some(&format!("({})", count)));
             }
         }
     }));
@@ -607,8 +613,15 @@ pub fn notify_status_change(
         );
     }
 
-    rebuild_tray_menu(app_handle);
+    // Defer tray menu rebuild — avatar image loading is slow and
+    // should not block the notification pipeline.
+    let h = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        rebuild_tray_menu(&h);
+    });
     reset_title_timer(app_handle.clone());
+    #[cfg(target_os = "windows")]
+    toast_overlay::update_overlay_state(app_handle);
     info!("Tray notify: {} {} {}", name, action, rid);
 
     // ---- Sound playback ----
@@ -738,6 +751,85 @@ async fn set_show_window_on_startup(
     Ok(())
 }
 
+// ---- Overlay toast commands ----
+
+/// Return the app tray icon so the frontend can show it in the collapsed
+/// overlay indicator.
+#[tauri::command]
+fn get_app_icon() -> Vec<u8> {
+    include_bytes!("../icons/32x32.png").to_vec()
+}
+
+#[tauri::command]
+fn trigger_collapse(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let count = NOTIFS.lock().unwrap().len();
+    if count > 1 {
+        let _ = app_handle.emit("toast-collapse", ());
+        #[cfg(target_os = "windows")]
+        crate::toast_overlay::collapse(&app_handle);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn dismiss_notif(room_id: u64, app_handle: tauri::AppHandle) -> Result<(), String> {
+    {
+        let mut notifs = NOTIFS.lock().unwrap();
+        notifs.retain(|n| n.room_id != room_id);
+    }
+    // Defer tray menu rebuild (avatar loading is slow).
+    let h = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        rebuild_tray_menu(&h);
+    });
+    #[cfg(target_os = "windows")]
+    toast_overlay::update_overlay_state(&app_handle);
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_all_notifs(app_handle: tauri::AppHandle) -> Result<(), String> {
+    {
+        let mut notifs = NOTIFS.lock().unwrap();
+        notifs.clear();
+    }
+    // Defer tray menu rebuild (avatar loading is slow).
+    let h = app_handle.clone();
+    tauri::async_runtime::spawn(async move {
+        rebuild_tray_menu(&h);
+    });
+    #[cfg(target_os = "windows")]
+    toast_overlay::update_overlay_state(&app_handle);
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_notif_url(
+    room_id: u64,
+    sub_type: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let url = match sub_type.as_str() {
+        "huya" => api::huya::HuyaApi::room_url(room_id),
+        "douyu" => api::douyu::DouyuApi::room_url(room_id),
+        _ => api::bilibili::BilibiliApi::room_url(room_id),
+    };
+    app_handle
+        .opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|e| format!("Failed to open URL: {}", e))?;
+
+    // Also dismiss the notification — same behaviour as tray menu click.
+    {
+        let mut notifs = crate::NOTIFS.lock().unwrap();
+        notifs.retain(|n| n.room_id != room_id);
+    }
+    #[cfg(target_os = "windows")]
+    toast_overlay::update_overlay_state(&app_handle);
+
+    Ok(())
+}
+
 // ---- App Entry Point ----
 
 fn get_context<R: Runtime>() -> Context<R> {
@@ -783,8 +875,6 @@ pub fn run() {
 
             let state = Arc::new(AppState::new(data_dir));
 
-            poller::start_poller(app.handle().clone(), state.clone());
-
             app.manage(state.clone());
 
             // Sync autostart state on launch
@@ -825,7 +915,12 @@ pub fn run() {
                         }
                         "clear_all" => {
                             NOTIFS.lock().unwrap().clear();
-                            rebuild_tray_menu(app_handle);
+                            let h = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                rebuild_tray_menu(&h);
+                            });
+                            #[cfg(target_os = "windows")]
+    toast_overlay::update_overlay_state(app_handle);
                         }
                         _ if id.starts_with("notif:") => {
                             let rid_str = id.strip_prefix("notif:").unwrap_or("0");
@@ -848,7 +943,12 @@ pub fn run() {
                                 let mut notifs = NOTIFS.lock().unwrap();
                                 notifs.retain(|n| n.room_id != rid);
                             }
-                            rebuild_tray_menu(app_handle);
+                            let h = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                rebuild_tray_menu(&h);
+                            });
+                            #[cfg(target_os = "windows")]
+    toast_overlay::update_overlay_state(app_handle);
                         }
                         _ => {}
                     }
@@ -861,6 +961,14 @@ pub fn run() {
                 store.get_all().config.show_window_on_startup
             };
             create_window(&app_handle, show_on_startup);
+
+            // Create the toast overlay window BEFORE starting the poller —
+            // the poller may trigger notifications immediately, and the
+            // overlay window must already exist.
+            #[cfg(target_os = "windows")]
+            toast_overlay::create_overlay_window(&app_handle);
+
+            poller::start_poller(app.handle().clone(), state.clone());
 
             Ok(())
         })
@@ -891,6 +999,11 @@ pub fn run() {
             set_sound_volume,
             set_auto_check_update,
             updater::restart_application,
+            dismiss_notif,
+            clear_all_notifs,
+            open_notif_url,
+            get_app_icon,
+            trigger_collapse,
         ])
         .run(ctx)
         .expect("error while running tauri application");

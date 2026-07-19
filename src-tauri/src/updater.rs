@@ -1,7 +1,6 @@
-use log::info;
-
 #[cfg(target_os = "macos")]
 fn schedule_restart_after_exit() -> Result<(), String> {
+    use log::info;
     use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
 

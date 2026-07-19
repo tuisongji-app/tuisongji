@@ -126,52 +126,85 @@ pub fn start_poller(app_handle: AppHandle, state: Arc<AppState>) {
                         }
 
                         let cache_key = (sub.r#type.clone(), sub.uid);
-                        let prev_status = {
+                        let prev = {
                             let mut cache = state.status_cache.lock().unwrap();
-                            cache
-                                .insert(cache_key, new_status.clone())
-                                .unwrap_or(LiveStatus::Offline)
+                            cache.insert(cache_key, new_status.clone())
                         };
 
-                        if prev_status != new_status {
-                            let display_name = {
-                                let store = state.store.lock().unwrap();
-                                let data = store.get_all();
-                                let s = data
-                                    .subscriptions
-                                    .iter()
-                                    .find(|s| s.uid == sub.uid && s.r#type == sub.r#type)
-                                    .cloned()
-                                    .unwrap_or(Subscription {
-                                        r#type: sub.r#type.clone(),
+                        // Collect display name (needed for both first-poll emit
+                        // and change-notification emit).
+                        let display_name = {
+                            let store = state.store.lock().unwrap();
+                            let data = store.get_all();
+                            let s = data
+                                .subscriptions
+                                .iter()
+                                .find(|s| s.uid == sub.uid && s.r#type == sub.r#type)
+                                .cloned()
+                                .unwrap_or(Subscription {
+                                    r#type: sub.r#type.clone(),
+                                    uid: sub.uid,
+                                    name: Some("未知".into()),
+                                    room_id: None,
+                                });
+                            s.name.unwrap_or_else(|| "未知".to_string())
+                        };
+
+                        match prev {
+                            Some(old) if old != new_status => {
+                                // Real status change — notify.
+                                let status_update = crate::state::SubscriptionStatus {
+                                    uid: sub.uid,
+                                    sub_type: sub.r#type.clone(),
+                                    name: display_name.clone(),
+                                    status: new_status.clone(),
+                                    title: Some(title.clone()),
+                                    room_id: Some(room_id),
+                                    avatar_url: Some(state.avatar_full_path(&sub.r#type, sub.uid)),
+                                };
+                                let _ = app_handle.emit("status-changed", &status_update);
+
+                                crate::notify_status_change(
+                                    &app_handle,
+                                    sub.uid,
+                                    &sub.r#type,
+                                    &display_name,
+                                    &old,
+                                    &new_status,
+                                    Some(room_id),
+                                    Some(&state.avatar_full_path(&sub.r#type, sub.uid)),
+                                );
+                            }
+                            Some(_) => {
+                                // Same status — nothing to do.
+                            }
+                            None => {
+                                // First poll — treat as transition from Offline.
+                                let old = LiveStatus::Offline;
+                                if old != new_status {
+                                    let status_update = crate::state::SubscriptionStatus {
                                         uid: sub.uid,
-                                        name: Some("未知".into()),
-                                        room_id: None,
-                                    });
-                                s.name.unwrap_or_else(|| "未知".to_string())
-                            };
+                                        sub_type: sub.r#type.clone(),
+                                        name: display_name.clone(),
+                                        status: new_status.clone(),
+                                        title: Some(title.clone()),
+                                        room_id: Some(room_id),
+                                        avatar_url: Some(state.avatar_full_path(&sub.r#type, sub.uid)),
+                                    };
+                                    let _ = app_handle.emit("status-changed", &status_update);
 
-                            let status_update = crate::state::SubscriptionStatus {
-                                uid: sub.uid,
-                                sub_type: sub.r#type.clone(),
-                                name: display_name.clone(),
-                                status: new_status.clone(),
-                                title: Some(title.clone()),
-                                room_id: Some(room_id),
-                                avatar_url: Some(state.avatar_full_path(&sub.r#type, sub.uid)),
-                            };
-                            let _ = app_handle.emit("status-changed", &status_update);
-
-                            crate::notify_status_change(
-                                &app_handle,
-                                sub.uid,
-                                &sub.r#type,
-                                &display_name,
-                                &prev_status,
-                                &new_status,
-                                Some(room_id),
-                                Some(&state.avatar_full_path(&sub.r#type, sub.uid)),
-                            );
+                                    crate::notify_status_change(
+                                        &app_handle,
+                                        sub.uid,
+                                        &sub.r#type,
+                                        &display_name,
+                                        &old,
+                                        &new_status,
+                                        Some(room_id),
+                                        Some(&state.avatar_full_path(&sub.r#type, sub.uid)),
+                                    );
+                                }
+                            }
                         }
                     }
                     Err(e) => {

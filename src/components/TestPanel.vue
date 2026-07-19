@@ -2,7 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { testTriggerStatus } from "@/tauri";
+import { testTriggerStatus, triggerCollapse } from "@/tauri";
 import { statusLabels } from "@/types";
 import { FlaskConical } from "lucide-vue-next";
 import type { SubscriptionStatus } from "@/types";
@@ -33,6 +33,11 @@ function trigger(uid: number, subType: string, target: string) {
       <CardDescription>手动模拟直播状态变化，测试通知功能</CardDescription>
     </CardHeader>
     <CardContent>
+      <div class="mb-3">
+        <Button variant="outline" size="sm" @click="triggerCollapse().catch(console.error)">
+          折叠通知浮层
+        </Button>
+      </div>
       <div v-if="subscriptions.length === 0" class="text-sm text-muted-foreground">
         暂无订阅，先添加一个再测试
       </div>
