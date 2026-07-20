@@ -78,3 +78,42 @@ jobs:
           releaseName: ${{ github.ref_name }}
           releaseBody: release ${{ github.ref_name }}
           assetNamePattern: tuisongji_[version]_[arch].[ext]
+
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - args: '--target x86_64-pc-windows-msvc'
+            arch: 'x64'
+            platform: windows-latest
+          - args: '--target aarch64-pc-windows-msvc'
+            arch: 'arm64'
+            platform: windows-latest
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'windows-latest' && 'x86_64-pc-windows-msvc,aarch64-pc-windows-msvc' || '' }}
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseBody: release ${{ github.ref_name }}
+          assetNamePattern: tuisongji_[version]_[arch].[ext]
