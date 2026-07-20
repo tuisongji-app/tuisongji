@@ -58,7 +58,7 @@ console.log(`Bumping: ${old} → ${next}`);
 
 // Refresh lock files
 execSync("bun install", { cwd: ROOT, stdio: "ignore" });
-execSync("cargo generate-lockfile", {
+execSync("cargo check -p tuisongji --quiet", {
   cwd: join(ROOT, "src-tauri"),
   stdio: "ignore",
 });
