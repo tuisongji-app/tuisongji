@@ -84,10 +84,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - args: '--target x86_64-pc-windows-msvc'
+          - args: '--target x86_64-pc-windows-msvc --bundles nsis'
             arch: 'x64'
             platform: windows-latest
-          - args: '--target aarch64-pc-windows-msvc'
+          - args: '--target aarch64-pc-windows-msvc --bundles nsis'
             arch: 'arm64'
             platform: windows-latest
     runs-on: ${{ matrix.platform }}
