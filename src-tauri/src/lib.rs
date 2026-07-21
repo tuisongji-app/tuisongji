@@ -50,13 +50,11 @@ fn reset_title_timer(app_handle: tauri::AppHandle) {
     *timer = Some(tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(timeout_mins * 60)).await;
         let count = NOTIFS.lock().unwrap().len();
-        if count > 1 {
-            let _ = h.emit("toast-collapse", ());
-            #[cfg(target_os = "windows")]
-            crate::toast_overlay::collapse(&h);
-            if let Some(tray) = h.tray_by_id("main") {
-                let _ = tray.set_title(Some(&format!("({})", count)));
-            }
+        let _ = h.emit("toast-collapse", ());
+        #[cfg(target_os = "windows")]
+        crate::toast_overlay::collapse(&h);
+        if let Some(tray) = h.tray_by_id("main") {
+            let _ = tray.set_title(Some(&format!("({})", count)));
         }
     }));
 }
@@ -762,12 +760,9 @@ fn get_app_icon() -> Vec<u8> {
 
 #[tauri::command]
 fn trigger_collapse(app_handle: tauri::AppHandle) -> Result<(), String> {
-    let count = NOTIFS.lock().unwrap().len();
-    if count > 1 {
-        let _ = app_handle.emit("toast-collapse", ());
-        #[cfg(target_os = "windows")]
-        crate::toast_overlay::collapse(&app_handle);
-    }
+    let _ = app_handle.emit("toast-collapse", ());
+    #[cfg(target_os = "windows")]
+    crate::toast_overlay::collapse(&app_handle);
     Ok(())
 }
 

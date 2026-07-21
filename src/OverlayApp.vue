@@ -77,7 +77,7 @@ onMounted(async () => {
   <div class="overlay-root">
     <!-- Collapsed indicator -->
     <div
-      v-if="collapsed && items.length > 1"
+      v-if="collapsed && items.length > 0"
       class="collapse-bar"
       @click="expand"
     >
@@ -86,7 +86,7 @@ onMounted(async () => {
     </div>
 
     <!-- Normal card stack (not collapsed) -->
-    <template v-if="!collapsed || items.length <= 1">
+    <template v-if="!collapsed">
       <div v-if="items.length > 0" class="header-row">
         <button class="clear-all-btn" @click="clearAll">
           清空全部 ({{ items.length }})
