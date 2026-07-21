@@ -23,6 +23,12 @@ import { Button } from "@/components/ui/button";
 import { toast } from "vue-sonner";
 import { Settings, RefreshCw, ExternalLink, Info } from "lucide-vue-next";
 
+const badgeTimeoutHint = __IS_WINDOWS__
+  ? "通知弹窗超时后自动折叠"
+  : __IS_MACOS__
+    ? "托盘旁通知超时会自动隐藏"
+    : "";
+
 const props = defineProps<{
   autoUpdateVersion?: string;
   autoUpdateBody?: string;
@@ -228,7 +234,7 @@ defineExpose({ scrollToAbout });
       <div class="flex items-center justify-between">
         <div>
           <span class="text-sm">通知隐藏时间 (分钟)</span>
-          <p class="text-xs text-muted-foreground mt-0.5">托盘旁通知超时会自动隐藏</p>
+          <p class="text-xs text-muted-foreground mt-0.5">{{ badgeTimeoutHint }}</p>
         </div>
         <NumberField
           id="badge"
