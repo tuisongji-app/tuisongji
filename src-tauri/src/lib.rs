@@ -53,8 +53,10 @@ fn reset_title_timer(app_handle: tauri::AppHandle) {
         let _ = h.emit("toast-collapse", ());
         #[cfg(target_os = "windows")]
         crate::toast_overlay::collapse(&h);
-        if let Some(tray) = h.tray_by_id("main") {
-            let _ = tray.set_title(Some(&format!("({})", count)));
+        if count > 0 {
+            if let Some(tray) = h.tray_by_id("main") {
+                let _ = tray.set_title(Some(&format!("({})", count)));
+            }
         }
     }));
 }
