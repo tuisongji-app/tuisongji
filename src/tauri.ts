@@ -67,6 +67,15 @@ export function getSoundInfo(name: string): Promise<SoundInfo> {
   return invoke("get_sound_info", { name });
 }
 
+export function importSoundFile(
+  name: string,
+  eventType: string,
+  filename: string,
+  data: number[],
+): Promise<SoundInfo> {
+  return invoke("import_sound_file", { name, eventType, filename, data });
+}
+
 export function playStreamerSound(
   name: string,
   eventType: string,

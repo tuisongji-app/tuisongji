@@ -106,10 +106,15 @@ pub async fn download_sounds_for_name(
     Ok((dl_live, dl_offline))
 }
 
-/// Returns the available sound file lists for a streamer from the manifest.
-pub async fn get_sounds_for_name(name: &str) -> Result<Option<Sounds>, String> {
-    let manifest = fetch_manifest().await?;
-    Ok(manifest.channels.get(name).cloned())
+/// Read remote sound metadata without making local sound management wait for the network.
+pub fn get_cached_sounds_for_name(name: &str) -> Option<Sounds> {
+    MANIFEST_CACHE
+        .lock()
+        .ok()?
+        .as_ref()?
+        .channels
+        .get(name)
+        .cloned()
 }
 
 /// Try to download a single sound file. Returns `Ok(true)` if downloaded,

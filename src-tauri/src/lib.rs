@@ -432,8 +432,8 @@ async fn get_config(
 
 /// 从 manifest 和本地文件系统构建 SoundInfo。
 /// "可用"列表 = manifest 中的文件 ∪ 本地已下载的文件（手动添加的也能显示）。
-async fn build_sound_info(name: &str, data_dir: &std::path::Path) -> state::SoundInfo {
-    let sounds = github_sounds::get_sounds_for_name(name).await.unwrap_or(None);
+fn build_sound_info(name: &str, data_dir: &std::path::Path) -> state::SoundInfo {
+    let sounds = github_sounds::get_cached_sounds_for_name(name);
     let (manifest_live, manifest_offline): (Vec<String>, Vec<String>) = sounds
         .as_ref()
         .map(|s| (s.live.clone(), s.offline.clone()))
@@ -476,7 +476,7 @@ async fn download_streamer_sounds(
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<state::SoundInfo, String> {
     github_sounds::download_sounds_for_name(&name, &state.data_dir).await?;
-    Ok(build_sound_info(&name, &state.data_dir).await)
+    Ok(build_sound_info(&name, &state.data_dir))
 }
 
 #[tauri::command]
@@ -484,7 +484,19 @@ async fn get_sound_info(
     name: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<state::SoundInfo, String> {
-    Ok(build_sound_info(&name, &state.data_dir).await)
+    Ok(build_sound_info(&name, &state.data_dir))
+}
+
+#[tauri::command]
+async fn import_sound_file(
+    name: String,
+    event_type: String,
+    filename: String,
+    data: Vec<u8>,
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<state::SoundInfo, String> {
+    sound::import_file(&name, &event_type, &filename, &data, &state.data_dir)?;
+    Ok(build_sound_info(&name, &state.data_dir))
 }
 
 #[tauri::command]
@@ -511,12 +523,7 @@ async fn play_sound_file(
         let store = state.store.lock().unwrap();
         store.get_all().config
     };
-    let path = state
-        .data_dir
-        .join("sounds")
-        .join(&name)
-        .join(&event_type)
-        .join(&filename);
+    let path = sound::sound_file_path(&name, &event_type, &filename, &state.data_dir)?;
     sound::play_file(&path, config.sound_volume)
 }
 
@@ -526,9 +533,11 @@ async fn open_sounds_dir(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    let dir = state.data_dir.join("sounds").join(&name);
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create dir: {}", e))?;
+    let dir = sound::streamer_sounds_dir(&name, &state.data_dir)?;
+    for event_type in ["live", "offline"] {
+        std::fs::create_dir_all(dir.join(event_type))
+            .map_err(|e| format!("创建音效文件夹失败：{}", e))?;
+    }
     app_handle
         .opener()
         .open_path(dir.to_string_lossy().as_ref(), None::<&str>)
@@ -988,6 +997,7 @@ pub fn run() {
             set_show_window_on_startup,
             download_streamer_sounds,
             get_sound_info,
+            import_sound_file,
             refresh_sound_manifest,
             open_sounds_dir,
             play_streamer_sound,

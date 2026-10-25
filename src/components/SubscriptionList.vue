@@ -28,10 +28,11 @@ function soundKey(sub: SubscriptionStatus) {
 async function fetchAllSoundInfos() {
   // 先刷新 manifest 缓存（一次网络请求），再并行取各项音效（命中缓存）
   await refreshSoundManifest().catch(() => {});
+  const subscriptions = [...props.subscriptions];
   const results = await Promise.allSettled(
-    props.subscriptions.map((sub) => getSoundInfo(sub.name))
+    subscriptions.map((sub) => getSoundInfo(sub.name))
   );
-  props.subscriptions.forEach((sub, i) => {
+  subscriptions.forEach((sub, i) => {
     const result = results[i];
     soundStates[soundKey(sub)] =
       result.status === "fulfilled" ? result.value : null;
