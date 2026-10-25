@@ -195,6 +195,9 @@ function openRoom() {
             variant="ghost"
             size="icon"
             class="h-8 w-8 text-destructive hover:text-destructive"
+            title="删除主播及本地文件"
+            aria-label="删除主播及本地文件"
+            :disabled="soundLoading || importing"
             @click="emit('remove', subscription.uid, subscription.sub_type)"
           >
             <Trash2 class="w-4 h-4" />

@@ -296,21 +296,7 @@ async fn remove_subscription(
     sub_type: String,
     state: tauri::State<'_, Arc<AppState>>,
 ) -> Result<(), String> {
-    {
-        let mut store = state.store.lock().unwrap();
-        let mut data = store.get_all();
-        data.subscriptions.retain(|s| !(s.uid == uid && s.r#type == sub_type));
-        let value =
-            Value::serialize(&data.subscriptions).map_err(|e| format!("Serialize: {}", e))?;
-        store
-            .set("subscriptions", value)
-            .map_err(|e| format!("Store: {}", e))?;
-    }
-    {
-        let mut cache = state.status_cache.lock().unwrap();
-        cache.remove(&(sub_type, uid));
-    }
-    Ok(())
+    state.remove_subscription(uid, &sub_type)
 }
 
 #[tauri::command]

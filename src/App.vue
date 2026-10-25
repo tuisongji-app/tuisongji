@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
-import { Toaster } from 'vue-sonner'
+import { Toaster, toast } from "vue-sonner";
 import { check } from "@tauri-apps/plugin-updater";
 
 import SubscriptionForm from "./components/SubscriptionForm.vue";
@@ -71,8 +71,8 @@ async function onSubscriptionRemoved(uid: number, subType: string) {
     subscriptions.value = subscriptions.value.filter(
       (s) => !(s.uid === uid && s.sub_type === subType)
     );
-  } catch {
-    // handle silently
+  } catch (error) {
+    toast.error(typeof error === "string" ? error : "删除主播失败，请稍后重试");
   }
 }
 </script>
